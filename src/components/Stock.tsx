@@ -416,7 +416,7 @@ export default function Stock({ lang }: StockProps) {
             <div className="mt-4 space-y-2">
               {currentImg ? (
                 <div className="relative group cursor-pointer" onClick={() => setLightboxImage(currentImg)}>
-                  <img src={currentImg} alt="Preview" className="w-full h-48 object-contain border border-sky-200 rounded-lg group-hover:opacity-95 transition-opacity" />
+                  <img src={currentImg} alt="Preview" className="w-full h-64 object-contain border border-sky-200 rounded-lg group-hover:opacity-95 transition-opacity" />
                   <button 
                     onClick={(e) => { e.stopPropagation(); setCurrentImg(null); }}
                     className="absolute top-2 right-2 p-2 bg-red-600 text-white rounded-full z-10"

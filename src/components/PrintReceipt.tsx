@@ -577,7 +577,7 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
           {order.img && (
             <div className="mt-2 text-center">
               <p className="font-bold text-xs font-nastaliq mb-1 text-right">تصویر:</p>
-              <img src={order.img} alt="" className="max-h-36 mx-auto border border-zinc-200 rounded-lg shadow-sm" style={{ objectFit: 'contain' }} />
+              <img src={order.img} alt="" className="max-h-48 mx-auto border border-zinc-200 rounded-lg shadow-sm" style={{ objectFit: 'contain' }} />
             </div>
           )}
 
@@ -784,7 +784,7 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
 
           {repair.img && (
             <div className="mt-4 text-center">
-              <img src={repair.img} alt="" className="max-h-48 mx-auto border border-zinc-200 rounded" />
+              <img src={repair.img} alt="" className="max-h-64 mx-auto border border-zinc-200 rounded" />
             </div>
           )}
 
@@ -885,7 +885,7 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
 
           {karigar.img && (
             <div className="mt-4 text-center">
-              <img src={karigar.img} alt="" className="max-h-48 mx-auto border border-zinc-200 rounded" />
+              <img src={karigar.img} alt="" className="max-h-64 mx-auto border border-zinc-200 rounded" />
             </div>
           )}
 
@@ -967,7 +967,7 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
 
           {stock.img && (
             <div className="mt-6 text-center">
-              <img src={stock.img} alt="" className="max-h-64 mx-auto border border-zinc-200 rounded" />
+              <img src={stock.img} alt="" className="max-h-80 mx-auto border border-zinc-200 rounded" />
             </div>
           )}
 
@@ -1059,7 +1059,7 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
         {purchase.img && (
           <div className="mt-4 text-center">
             <h4 className="text-xs font-bold font-nastaliq mb-2">خریدے گئے سونے کی تصویر</h4>
-            <img src={purchase.img} alt="" className="max-h-64 mx-auto border-2 border-zinc-200 rounded-xl shadow-sm" />
+            <img src={purchase.img} alt="" className="max-h-80 mx-auto border-2 border-zinc-200 rounded-xl shadow-sm" />
           </div>
         )}
 

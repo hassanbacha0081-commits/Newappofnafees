@@ -405,28 +405,49 @@ export default function Karigar({ lang }: KarigarProps) {
         <div className="mt-6 space-y-3">
           <label className="text-sm text-zinc-500 urdu-text block text-right pr-2">{t.karigarLabels.labReport}</label>
           <div className="flex flex-col gap-4">
-            <div className="w-full">
-              <input 
-                type="file" 
-                accept="image/*" 
-                capture="camera"
-                onChange={handleFileChange}
-                className="hidden"
-                id="karigarCameraInput"
-              />
-              <label 
-                htmlFor="karigarCameraInput"
-                className="w-full min-h-[80px] flex items-center justify-center gap-3 p-4 border-2 border-dashed border-sky-200 rounded-xl text-zinc-400 cursor-pointer hover:border-gold hover:text-gold transition-all bg-white"
-              >
-                <Camera size={26} />
-                <span className="urdu-text text-lg">
-                  {currentImg ? (lang === 'ur' ? 'تصویر تبدیل کریں' : 'Change Image') : t.captureImage}
-                </span>
-              </label>
+            <div className="w-full flex gap-2">
+              <div className="flex-1">
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  capture="environment"
+                  onChange={handleFileChange}
+                  className="hidden"
+                  id="karigarCameraInput"
+                />
+                <label 
+                  htmlFor="karigarCameraInput"
+                  className="w-full min-h-[80px] flex items-center justify-center gap-3 p-4 border-2 border-dashed border-sky-200 rounded-xl text-zinc-400 cursor-pointer hover:border-gold hover:text-gold transition-all bg-white"
+                >
+                  <Camera size={26} />
+                  <span className="urdu-text text-lg">
+                    {lang === 'ur' ? 'کیمرہ' : 'Camera'}
+                  </span>
+                </label>
+              </div>
+
+              <div className="flex-1">
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  onChange={handleFileChange}
+                  className="hidden"
+                  id="karigarGalleryInput"
+                />
+                <label 
+                  htmlFor="karigarGalleryInput"
+                  className="w-full min-h-[80px] flex items-center justify-center gap-3 p-4 border-2 border-dashed border-sky-200 rounded-xl text-zinc-400 cursor-pointer hover:border-gold hover:text-gold transition-all bg-white"
+                >
+                  <ImageIcon size={26} />
+                  <span className="urdu-text text-lg">
+                    {lang === 'ur' ? 'گیلری' : 'Gallery'}
+                  </span>
+                </label>
+              </div>
             </div>
 
             {currentImg && (
-              <div className="relative w-full sm:w-48 h-48 rounded-xl overflow-hidden border-2 border-gold shadow-lg animate-in zoom-in-95 duration-200 cursor-pointer group" onClick={() => setLightboxImage(currentImg)}>
+              <div className="relative w-full sm:w-64 h-64 rounded-xl overflow-hidden border-2 border-gold shadow-lg animate-in zoom-in-95 duration-200 cursor-pointer group" onClick={() => setLightboxImage(currentImg)}>
                 <img src={currentImg} alt="Preview" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                 <button 
                   onClick={(e) => { e.stopPropagation(); setCurrentImg(null); }}

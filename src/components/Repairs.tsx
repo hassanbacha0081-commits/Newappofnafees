@@ -416,7 +416,7 @@ export default function Repairs({ lang }: RepairsProps) {
                 </div>
 
                 {currentImg && (
-                  <div className="relative w-full sm:w-48 h-48 rounded-xl overflow-hidden border-2 border-gold shadow-lg animate-in zoom-in-95 duration-200 cursor-pointer group" onClick={() => setLightboxImage(currentImg)}>
+                  <div className="relative w-full sm:w-64 h-64 rounded-xl overflow-hidden border-2 border-gold shadow-lg animate-in zoom-in-95 duration-200 cursor-pointer group" onClick={() => setLightboxImage(currentImg)}>
                     <img src={currentImg} alt="Preview" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                     <button 
                       onClick={(e) => { e.stopPropagation(); setCurrentImg(null); }}

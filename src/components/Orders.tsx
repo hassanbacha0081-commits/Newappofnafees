@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Order } from '../db';
 import { translations, type Language } from '../translations';
 import { formatCurrency, formatDate, formatWhatsAppUrl, compressImage } from '../lib/utils';
-import { Plus, Check, Trash2, Camera, RotateCcw, MessageCircle, Printer, X, Download, AlertCircle } from 'lucide-react';
+import { Plus, Check, Trash2, Camera, RotateCcw, MessageCircle, Printer, X, Download, AlertCircle, ImageIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useReactToPrint } from 'react-to-print';
 import html2canvas from 'html2canvas';
@@ -46,7 +46,8 @@ export default function Orders({ lang }: OrdersProps) {
     status: 'pending',
     makingCharges: '',
     weightPolish: '',
-    totalWt: ''
+    totalWt: '',
+    payments: [] as {amt: number, date: string}[]
   });
 
   const [printData, setPrintData] = useState<{ data: Order, id: number } | null>(null);
@@ -190,7 +191,7 @@ export default function Orders({ lang }: OrdersProps) {
   }, [searchTerm]);
 
   const updateRem = () => {
-    return formData.total - formData.recAmt;
+    if (editId) { return formData.total - formData.payments.reduce((s, p) => s + p.amt, 0); } return formData.total - formData.recAmt;
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -221,8 +222,8 @@ export default function Orders({ lang }: OrdersProps) {
       oldWt: formData.oldWt ? parseFloat(Number(formData.oldWt).toFixed(2)).toString() : '',
       readyWt: formData.readyWt ? parseFloat(Number(formData.readyWt).toFixed(2)).toString() : '',
       total: formData.total,
-      payments: editId ? (await db.orders.get(editId))?.payments || [] : [{ amt: formData.recAmt, date: formatDate(new Date(), 'ur-PK') }],
-      rem: formData.total - formData.recAmt,
+      payments: editId ? formData.payments : [{ amt: formData.recAmt, date: formatDate(new Date(), 'ur-PK') }],
+      rem: updateRem(),
       status: formData.status,
       img: currentImg,
       makingCharges: formData.makingCharges ? parseFloat(Number(formData.makingCharges).toFixed(2)).toString() : '',
@@ -271,7 +272,8 @@ export default function Orders({ lang }: OrdersProps) {
       status: 'pending',
       makingCharges: '',
       weightPolish: '',
-      totalWt: ''
+      totalWt: '',
+    payments: [] as {amt: number, date: string}[]
     });
   };
 
@@ -293,7 +295,8 @@ export default function Orders({ lang }: OrdersProps) {
       status: order.status,
       makingCharges: order.makingCharges || '',
       weightPolish: order.weightPolish || '',
-      totalWt: order.totalWt || ''
+      totalWt: order.totalWt || '',
+      payments: order.payments || [{ amt: order.total - order.rem, date: order.date }]
     });
     setCurrentImg(order.img || null);
     setIsAdding(true);
@@ -658,7 +661,7 @@ export default function Orders({ lang }: OrdersProps) {
               <label className="text-xs text-zinc-500 urdu-text font-bold">{lang === 'ur' ? 'آرڈر کی تصویر (Order Pic):' : 'Order Pic:'}</label>
               {currentImg ? (
                 <div className="relative group cursor-pointer max-w-sm mx-auto" onClick={() => setLightboxImage(currentImg)}>
-                  <img src={currentImg} alt="Preview" className="w-full h-40 object-contain border border-sky-200 rounded-lg group-hover:opacity-95 transition-opacity" />
+                  <img src={currentImg} alt="Preview" className="w-full h-52 object-contain border border-sky-200 rounded-lg group-hover:opacity-95 transition-opacity" />
                   <button 
                     type="button"
                     onClick={(e) => { e.stopPropagation(); setCurrentImg(null); }}
@@ -668,21 +671,36 @@ export default function Orders({ lang }: OrdersProps) {
                   </button>
                 </div>
               ) : (
-                <div className="max-w-sm mx-auto">
+                <div className="max-w-sm mx-auto flex gap-2">
                   <input 
                     type="file" 
                     accept="image/*" 
-                    capture="camera"
+                    capture="environment"
                     onChange={handleFileChange}
                     className="hidden"
                     id="ordersCameraInput"
                   />
                   <label 
                     htmlFor="ordersCameraInput"
-                    className="w-full p-3 border-2 border-dashed border-sky-200 rounded-lg text-zinc-500 flex items-center justify-center gap-2 cursor-pointer hover:border-gold hover:text-gold transition-all"
+                    className="flex-1 p-3 border-2 border-dashed border-sky-200 rounded-lg text-zinc-500 flex items-center justify-center gap-2 cursor-pointer hover:border-gold hover:text-gold transition-all"
                   >
                     <Camera size={18} />
-                    <span className="urdu-text text-sm">{t.captureImage}</span>
+                    <span className="urdu-text text-sm">{lang === 'ur' ? 'کیمرہ' : 'Camera'}</span>
+                  </label>
+
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={handleFileChange}
+                    className="hidden"
+                    id="ordersGalleryInput"
+                  />
+                  <label 
+                    htmlFor="ordersGalleryInput"
+                    className="flex-1 p-3 border-2 border-dashed border-sky-200 rounded-lg text-zinc-500 flex items-center justify-center gap-2 cursor-pointer hover:border-gold hover:text-gold transition-all"
+                  >
+                    <ImageIcon size={18} />
+                    <span className="urdu-text text-sm">{lang === 'ur' ? 'گیلری' : 'Gallery'}</span>
                   </label>
                 </div>
               )}
@@ -708,16 +726,52 @@ export default function Orders({ lang }: OrdersProps) {
                 placeholder="e.g. 50,000"
               />
             </div>
-            <div className="space-y-1">
-              <label className="text-xs text-zinc-500 urdu-text">وصول شدہ رقم (Advance):</label>
-              <input 
-                type="number" 
-                value={formData.recAmt || ''}
-                onChange={e => setFormData({ ...formData, recAmt: Number(e.target.value) })}
-                className="w-full p-3 bg-white border border-sky-200 rounded-lg outline-none focus:border-gold text-black"
-                placeholder="e.g. 10,000"
-              />
-            </div>
+            {!editId ? (
+              <div className="space-y-1">
+                <label className="text-xs text-zinc-500 urdu-text">وصول شدہ رقم (Advance):</label>
+                <input 
+                  type="number" 
+                  value={formData.recAmt || ''}
+                  onChange={e => setFormData({ ...formData, recAmt: Number(e.target.value) })}
+                  className="w-full p-3 bg-white border border-sky-200 rounded-lg outline-none focus:border-gold text-black"
+                  placeholder="e.g. 10,000"
+                />
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <label className="text-xs text-zinc-500 urdu-text">ادائیگیاں (Payments):</label>
+                {formData.payments && formData.payments.length > 0 ? (
+                  <div className="space-y-2">
+                    {formData.payments.map((p, idx) => (
+                      <div key={idx} className="flex gap-2 items-center">
+                        <span className="text-xs text-zinc-400 w-20">{p.date}</span>
+                        <input 
+                          type="number" 
+                          value={p.amt || ''}
+                          onChange={e => {
+                            const newPayments = [...formData.payments];
+                            newPayments[idx].amt = Number(e.target.value);
+                            setFormData({ ...formData, payments: newPayments });
+                          }}
+                          className="flex-1 p-2 bg-white border border-sky-200 rounded-lg outline-none focus:border-gold text-black text-sm"
+                        />
+                        <button 
+                          onClick={() => {
+                            const newPayments = formData.payments.filter((_, i) => i !== idx);
+                            setFormData({ ...formData, payments: newPayments });
+                          }}
+                          className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-zinc-400 italic">کوئی ادائیگی موجود نہیں</p>
+                )}
+              </div>
+            )}
           </div>
           
           <div className="mt-6 p-4 bg-sky-50 rounded-xl border border-gold-20 flex justify-between items-center shadow-inner">

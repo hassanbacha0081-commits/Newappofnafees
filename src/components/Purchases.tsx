@@ -322,7 +322,7 @@ export default function Purchases({ lang }: PurchasesProps) {
                   {img && (
                     <div 
                       onClick={() => setLightboxImage(img)}
-                      className="h-40 flex-1 rounded-3xl bg-sky-50 overflow-hidden border border-sky-100 shadow-inner group relative cursor-pointer"
+                      className="h-52 flex-1 rounded-3xl bg-sky-50 overflow-hidden border border-sky-100 shadow-inner group relative cursor-pointer"
                       title={isUrdu ? 'بڑی تصویر دیکھیں' : 'View Large Image'}
                     >
                       <img src={img} alt="Gold Image" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 hover:opacity-95" />
