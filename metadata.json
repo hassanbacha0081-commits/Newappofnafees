@@ -1,0 +1,7 @@
+{
+  "name": "Remix: Nafees Jewellers ERP",
+  "description": "A comprehensive management system for Nafees Jeweller\u0027s with billing, records, orders, and more. Supports Urdu and English with a professional business theme. Now includes native Android backup, restore, a functional installment (Qist) system, and a new professional gold jewelry icon. Version 1.1.0.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

@@ -1,0 +1,73 @@
+# CI/CD Pipeline to automate building the Android Mobile Application (.apk)
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: |
+          npm install
+          npm install -g @capacitor/cli
+
+      - name: Lint and Check Types
+        run: npm run lint
+
+      - name: Build Web Project
+        run: npm run build
+
+      - name: Capacitor Doctor
+        run: npx cap doctor
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '21'
+          cache: 'gradle'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+          validate-wrappers: false
+
+      - name: Regenerate Gradle Wrapper to Prevent Corruption
+        run: |
+          cd android
+          gradle wrapper --gradle-version 8.10.2
+
+      - name: Make Gradle Wrapper Executable
+        run: chmod +x android/gradlew
+
+      - name: Build APK with Gradle Wrapper
+        run: |
+          cd android
+          ./gradlew assembleDebug --stacktrace --info
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk

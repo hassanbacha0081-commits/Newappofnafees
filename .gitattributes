@@ -1,0 +1,18 @@
+# Auto-detect text files and perform line-ending normalization
+* text=auto
+
+# Declare binary files to completely prevent git formatting/corruption
+*.jar binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.mp3 binary
+*.wav binary
+*.mp4 binary
+*.pdf binary
+*.zip binary
+*.aar binary
+*.apk binary
