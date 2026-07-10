@@ -1,0 +1,27 @@
+--- src/components/Records.tsx
++++ src/components/Records.tsx
+@@ -226,6 +226,24 @@
+     if (url) window.open(url, '_blank');
+   };
+ 
++  const totalSalesWeight = sales?.reduce((acc, sale) => {
++    return acc + sale.items.reduce((sum, item) => {
++      if (item.t > 0) {
++        return sum + (Number(item.w) || 0);
++      }
++      return sum;
++    }, 0);
++  }, 0) || 0;
++
++  const totalPolishWeight = sales?.reduce((acc, sale) => {
++    return acc + sale.items.reduce((sum, item) => {
++      if (item.t > 0) {
++        return sum + (Number(item.mk) || 0);
++      }
++      return sum;
++    }, 0);
++  }, 0) || 0;
++
+   return (
+     <div className="max-w-6xl mx-auto space-y-8 pb-12">
+       {/* Image Modal */}

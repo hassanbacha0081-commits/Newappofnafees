@@ -526,16 +526,20 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
           <table className="receipt-table" style={{ marginBottom: '10px' }}>
             <tbody>
               <tr>
+                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white', padding: '10px' }}>آرڈر نمبر</th>
+                <td className="font-mono font-bold text-gold" style={{ width: '32%' }}>#{order.id || id || ''}</td>
+                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white', padding: '10px' }}>تاریخ بکنگ</th>
+                <td className="font-mono" style={{ width: '32%' }}>{order.date}</td>
+              </tr>
+              <tr>
                 <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white', padding: '10px' }}>نام کسٹمر</th>
                 <td className="font-nastaliq font-bold" style={{ width: '32%', paddingRight: '10px' }}>{order.name}</td>
                 <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white', padding: '10px' }}>فون نمبر</th>
                 <td className="font-mono" style={{ width: '32%' }} dir="ltr">{order.phone}</td>
               </tr>
               <tr>
-                <th className="font-nastaliq" style={{ background: '#b8860b', color: 'white', padding: '10px' }}>تاریخ بکنگ</th>
-                <td className="font-mono">{order.date}</td>
                 <th className="font-nastaliq" style={{ background: '#b8860b', color: 'white', padding: '10px' }}>تاریخ واپسی</th>
-                <td className="font-mono font-bold text-red-600">{order.due}</td>
+                <td className="font-mono font-bold text-red-600" colSpan={3}>{order.due}</td>
               </tr>
               <tr>
                 <th className="font-nastaliq" style={{ background: '#b8860b', color: 'white', padding: '10px' }}>نام آئٹم</th>

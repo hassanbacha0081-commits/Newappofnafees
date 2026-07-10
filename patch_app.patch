@@ -1,0 +1,39 @@
+--- src/App.tsx
++++ src/App.tsx
+@@ -55,6 +55,7 @@
+   const [appPin, setAppPin] = useState<string | null>(null);
+   const [isLocked, setIsLocked] = useState(false);
+   const [showExitToast, setShowExitToast] = useState(false);
++  const [showBackupReminder, setShowBackupReminder] = useState(false);
+ 
+   const t = translations[lang];
+   const isRTL = lang === 'ur';
+@@ -68,6 +69,8 @@
+       const phone = await db.settings.get('shopPhone');
+       const phone2 = await db.settings.get('shopPhone2');
+       const pin = await db.settings.get('appPin');
++      const weeklyBackupReminder = await db.settings.get('weeklyBackupReminder');
++      const lastBackupDate = await db.settings.get('lastBackupDate');
+       
+       if (rate) setGoldRate(rate.value);
+       if (name) setShopName(name.value);
+@@ -79,6 +82,19 @@
+         setIsLocked(true);
+       }
+       
++      if (weeklyBackupReminder && weeklyBackupReminder.value) {
++        const now = new Date();
++        let needsBackup = false;
++        if (!lastBackupDate || !lastBackupDate.value) {
++          needsBackup = true;
++        } else {
++          const lastBackup = new Date(lastBackupDate.value);
++          const daysSinceLastBackup = (now.getTime() - lastBackup.getTime()) / (1000 * 3600 * 24);
++          if (daysSinceLastBackup >= 7) needsBackup = true;
++        }
++        if (needsBackup) setShowBackupReminder(true);
++      }
++
+       setTimeout(() => setIsLoading(false), 1000);
+     };
+     fetchSettings();

@@ -226,7 +226,36 @@ export default function Records({ lang, setActiveSection, setEditingSale }: Reco
     if (url) window.open(url, '_blank');
   };
 
-    return (
+  const totalSalesWeight = sales?.reduce((acc, sale) => {
+    return acc + sale.items.reduce((sum, item) => {
+      if (item.t > 0) {
+        return sum + (Number(item.w) || 0);
+      }
+      return sum;
+    }, 0);
+  }, 0) || 0;
+
+  const totalPolishWeight = sales?.reduce((acc, sale) => {
+    return acc + sale.items.reduce((sum, item) => {
+      if (item.t > 0) {
+        return sum + (Number(item.mk) || 0);
+      }
+      return sum;
+    }, 0);
+  }, 0) || 0;
+
+  const totalMazdoriReceived = sales?.reduce((acc, sale) => {
+    return acc + sale.items.reduce((sum, item) => {
+      if (item.t > 0) {
+        const goldValue = (Number(item.w) + Number(item.mk)) * Number(item.r);
+        const mazdori = item.t - goldValue;
+        return sum + (mazdori > 0 ? mazdori : 0);
+      }
+      return sum;
+    }, 0);
+  }, 0) || 0;
+
+  return (
     <div className="max-w-6xl mx-auto space-y-8 pb-12">
       {/* Image Modal */}
       {viewImage && (
@@ -371,8 +400,25 @@ export default function Records({ lang, setActiveSection, setEditingSale }: Reco
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 20 }}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+            className="space-y-6"
           >
+            {/* Stats Block */}
+            <div className="flex gap-6 p-4 bg-white border border-sky-200 rounded-xl shadow-sm overflow-x-auto">
+              <div className="flex flex-col flex-shrink-0 min-w-32">
+                <span className="text-xs text-zinc-500 urdu-text font-bold">{lang === 'ur' ? 'کل سیلز وزن:' : 'Total Sales Wt:'}</span>
+                <span className="text-2xl font-black text-gold-dark">{totalSalesWeight.toFixed(3)}g</span>
+              </div>
+              <div className="flex flex-col flex-shrink-0 min-w-32 border-l border-sky-100 pl-6">
+                <span className="text-xs text-zinc-500 urdu-text font-bold">{lang === 'ur' ? 'کل پالش وزن:' : 'Total Polish Wt:'}</span>
+                <span className="text-2xl font-black text-sky-700">{totalPolishWeight.toFixed(3)}g</span>
+              </div>
+              <div className="flex flex-col flex-shrink-0 min-w-32 border-l border-sky-100 pl-6">
+                <span className="text-xs text-zinc-500 urdu-text font-bold">{lang === 'ur' ? 'کل مزدوری:' : 'Total Mazdori Received:'}</span>
+                <span className="text-2xl font-black text-green-600">Rs. {Math.round(totalMazdoriReceived).toLocaleString()}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {sales?.map((sale) => (
               <div
                 key={sale.id}
@@ -433,6 +479,15 @@ export default function Records({ lang, setActiveSection, setEditingSale }: Reco
                       <Printer size={16} />
                       <span className="text-xs font-bold urdu-text">{t.print}</span>
                     </button>
+                    {sale.items.some(i => i.img) && (
+                      <button
+                        onClick={() => setViewImage(sale.items.find(i => i.img)?.img!)}
+                        className="p-2 bg-sky-50 text-sky-600 hover:bg-sky-600 hover:text-white rounded-lg transition-colors border border-sky-200"
+                        title={lang === 'ur' ? 'تصویر دیکھیں' : 'View Image'}
+                      >
+                        <Eye size={16} />
+                      </button>
+                    )}
                     <button
                       onClick={() => handleUpdate(sale)}
                       className="p-2 bg-sky-50 text-zinc-600 hover:bg-gold hover:text-black rounded-lg transition-colors border border-sky-200"
@@ -455,6 +510,7 @@ export default function Records({ lang, setActiveSection, setEditingSale }: Reco
                 </div>
               </div>
             ))}
+            </div>
             {sales?.length === 0 && <EmptyState lang={lang} />}
           </motion.div>
         ) : (

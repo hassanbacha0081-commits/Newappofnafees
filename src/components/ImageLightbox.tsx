@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, ZoomIn, ZoomOut, RotateCw } from 'lucide-react';
+import { X, ZoomIn, ZoomOut, RotateCw, Download } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface ImageLightboxProps {
@@ -50,6 +50,21 @@ export default function ImageLightbox({ src, onClose, title }: ImageLightboxProp
             title="Rotate"
           >
             <RotateCw size={20} />
+          </button>
+          <button 
+            type="button"
+            onClick={() => {
+              const a = document.createElement('a');
+              a.href = src;
+              a.download = `image-${Date.now()}.png`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+            }}
+            className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-gray-300 hover:text-white"
+            title="Download"
+          >
+            <Download size={20} />
           </button>
           <button 
             type="button"

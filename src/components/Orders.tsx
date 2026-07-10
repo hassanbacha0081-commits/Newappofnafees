@@ -817,7 +817,12 @@ export default function Orders({ lang }: OrdersProps) {
           >
             <div className="flex justify-between items-start mb-4">
               <div>
-                <h3 className="text-lg font-bold text-zinc-900">{order.name}</h3>
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="text-lg font-bold text-zinc-900">{order.name}</h3>
+                  <div className="px-2 py-1 bg-sky-50 text-gold-dark rounded text-[10px] font-bold border border-gold-20">
+                    #{order.id}
+                  </div>
+                </div>
                 <p className="text-sm text-zinc-500">{order.phone}</p>
               </div>
               <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase`} style={{ color: getStatusColor(order.status), backgroundColor: `${getStatusColor(order.status)}20` }}>

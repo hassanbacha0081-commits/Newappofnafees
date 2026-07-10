@@ -43,6 +43,7 @@ export default function Settings({ lang, setGoldRate, setLang }: SettingsProps) 
     shopPhone2: translations.ur.shopPhone2,
     printShiftX: 0,
     printShiftY: 0,
+    weeklyBackupReminder: false,
     appPin: ''
   });
 
@@ -55,6 +56,7 @@ export default function Settings({ lang, setGoldRate, setLang }: SettingsProps) 
       const phone2Data = await db.settings.get('shopPhone2');
       const shiftXData = await db.settings.get('printShiftX');
       const shiftYData = await db.settings.get('printShiftY');
+      const backupReminderData = await db.settings.get('weeklyBackupReminder');
       const appPinData = await db.settings.get('appPin');
       
       setCurrentSettings({
@@ -65,6 +67,7 @@ export default function Settings({ lang, setGoldRate, setLang }: SettingsProps) 
         shopPhone2: phone2Data?.value || translations[lang].shopPhone2,
         printShiftX: shiftXData?.value || 0,
         printShiftY: shiftYData?.value || 0,
+        weeklyBackupReminder: backupReminderData?.value || false,
         appPin: appPinData?.value || ''
       });
     };
@@ -204,6 +207,8 @@ export default function Settings({ lang, setGoldRate, setLang }: SettingsProps) 
       const data = { sales, orders, karigars, repairs, stock, settings, goldPurchases };
       const fileName = `nafees_jewellers_backup_${new Date().toISOString().split('T')[0]}.json`;
       const jsonString = JSON.stringify(data);
+
+      await db.settings.put({ key: 'lastBackupDate', value: new Date().toISOString() });
 
       if (Capacitor.isNativePlatform()) {
         // Mobile (Android/iOS)
@@ -525,6 +530,26 @@ export default function Settings({ lang, setGoldRate, setLang }: SettingsProps) 
               <Download className="text-gold" />
               {lang === 'ur' ? 'بیک اپ اور ڈیٹا مینجمنٹ' : 'Backup & Data Management'}
             </h3>
+
+            <div className="flex items-center justify-between p-4 bg-sky-50 rounded-xl border border-sky-100 mt-4 mb-4">
+              <div>
+                <p className="font-bold text-sky-900 urdu-text">{lang === 'ur' ? 'ہفتہ وار بیک اپ یاددہانی' : 'Weekly Backup Reminder'}</p>
+                <p className="text-xs text-sky-600 urdu-text mt-1">{lang === 'ur' ? 'ڈیٹا محفوظ رکھنے کے لئے ہر ہفتے یاددہانی موصول کریں' : 'Get a reminder every week to backup your data'}</p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  className="sr-only peer" 
+                  checked={currentSettings.weeklyBackupReminder}
+                  onChange={async (e) => {
+                    const isChecked = e.target.checked;
+                    await db.settings.put({ key: 'weeklyBackupReminder', value: isChecked });
+                    setCurrentSettings(prev => ({ ...prev, weeklyBackupReminder: isChecked }));
+                  }}
+                />
+                <div className="w-11 h-6 bg-zinc-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-sky-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sky-500"></div>
+              </label>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <button 
