@@ -46,6 +46,9 @@ export interface Order {
   makingCharges?: string;
   weightPolish?: string;
   totalWt?: string;
+  izafiWt?: string;
+  price?: number;
+  mazdori?: number;
 }
 
 export interface KarigarRecord {

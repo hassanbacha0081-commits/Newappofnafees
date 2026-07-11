@@ -19,6 +19,8 @@ import { translations, type Language } from './translations';
 import { cn } from './lib/utils';
 import { db, type Sale } from './db';
 import { App as CapApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 
 // Sections
 import Billing from './components/Billing';
@@ -55,7 +57,6 @@ export default function App() {
   const [appPin, setAppPin] = useState<string | null>(null);
   const [isLocked, setIsLocked] = useState(false);
   const [showExitToast, setShowExitToast] = useState(false);
-  const [showBackupReminder, setShowBackupReminder] = useState(false);
 
   const t = translations[lang];
   const isRTL = lang === 'ur';
@@ -69,7 +70,7 @@ export default function App() {
       const phone = await db.settings.get('shopPhone');
       const phone2 = await db.settings.get('shopPhone2');
       const pin = await db.settings.get('appPin');
-      const weeklyBackupReminder = await db.settings.get('weeklyBackupReminder');
+      const autoBackupFreq = await db.settings.get('autoBackupFrequency');
       const lastBackupDate = await db.settings.get('lastBackupDate');
       
       if (rate) setGoldRate(rate.value);
@@ -82,17 +83,55 @@ export default function App() {
         setIsLocked(true);
       }
 
-      if (weeklyBackupReminder && weeklyBackupReminder.value) {
+      if (autoBackupFreq && autoBackupFreq.value && autoBackupFreq.value !== 'none') {
+        const freqDays = parseInt(autoBackupFreq.value, 10);
         const now = new Date();
         let needsBackup = false;
+        
         if (!lastBackupDate || !lastBackupDate.value) {
           needsBackup = true;
         } else {
           const lastBackup = new Date(lastBackupDate.value);
           const daysSinceLastBackup = (now.getTime() - lastBackup.getTime()) / (1000 * 3600 * 24);
-          if (daysSinceLastBackup >= 7) needsBackup = true;
+          if (daysSinceLastBackup >= freqDays) needsBackup = true;
         }
-        if (needsBackup) setShowBackupReminder(true);
+
+        if (needsBackup) {
+          try {
+            const sales = await db.sales.toArray();
+            const orders = await db.orders.toArray();
+            const karigars = await db.karigars.toArray();
+            const repairs = await db.repairs.toArray();
+            const stock = await db.stock.toArray();
+            const settings = await db.settings.toArray();
+            const goldPurchases = await db.goldPurchases.toArray();
+
+            const data = { sales, orders, karigars, repairs, stock, settings, goldPurchases };
+            const fileName = `nafees_jewellers_autobackup_${now.toISOString().split('T')[0]}.json`;
+            const jsonString = JSON.stringify(data);
+            
+            await db.settings.put({ key: 'lastBackupDate', value: now.toISOString() });
+            
+            if (Capacitor.isNativePlatform()) {
+              await Filesystem.writeFile({
+                path: fileName,
+                data: jsonString,
+                directory: Directory.Documents,
+                encoding: Encoding.UTF8,
+              });
+            } else {
+              const blob = new Blob([jsonString], { type: 'application/json' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = fileName;
+              a.click();
+              URL.revokeObjectURL(url);
+            }
+          } catch (error) {
+            console.error('Auto backup failed:', error);
+          }
+        }
       }
       
       setTimeout(() => setIsLoading(false), 1000);
@@ -417,51 +456,6 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Backup Reminder Modal */}
-      <AnimatePresence>
-        {showBackupReminder && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-sky-900/60 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm"
-              dir={isRTL ? "rtl" : "ltr"}
-            >
-              <div className="flex flex-col items-center gap-4 text-center">
-                <div className="w-16 h-16 bg-sky-100 text-sky-600 rounded-full flex items-center justify-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-sky-900 mb-2 urdu-text">
-                    {lang === 'ur' ? 'بیک اپ کا وقت' : 'Time for Backup'}
-                  </h3>
-                  <p className="text-zinc-600 text-sm urdu-text leading-relaxed">
-                    {lang === 'ur' ? 'ڈیٹا محفوظ رکھنے کے لیے بیک اپ لے لیں۔ پچھلے بیک اپ کو 7 دن یا اس سے زیادہ کا وقت گزر چکا ہے۔' : 'Please take a backup of your data to ensure safety. It has been 7 days or more since your last backup.'}
-                  </p>
-                </div>
-                <div className="flex w-full gap-3 mt-2">
-                  <button
-                    onClick={() => setShowBackupReminder(false)}
-                    className="flex-1 py-3 px-4 border-2 border-sky-200 text-sky-700 font-bold rounded-xl hover:bg-sky-50 transition-colors urdu-text"
-                  >
-                    {lang === 'ur' ? 'بعد میں' : 'Later'}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowBackupReminder(false);
-                      setActiveSection('settings');
-                    }}
-                    className="flex-1 py-3 px-4 bg-sky-600 text-white font-bold rounded-xl hover:bg-sky-700 transition-colors shadow-lg shadow-sky-200 urdu-text"
-                  >
-                    {lang === 'ur' ? 'بیک اپ لیں' : 'Backup Now'}
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

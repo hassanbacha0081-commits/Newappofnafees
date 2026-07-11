@@ -198,24 +198,24 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
           background: #b8860b !important;
           background-color: #b8860b !important;
           color: white !important;
-          padding: ${isPurchase ? '12px' : '10px'};
+          padding: ${isPurchase ? '12px 10px' : '6px 8px'};
           text-align: center;
           vertical-align: middle;
           border: 1px solid #ddd;
-          font-size: ${isPurchase ? '18px' : '16px'};
+          font-size: ${isPurchase ? '16px' : '13px'};
           font-weight: bold;
           -webkit-print-color-adjust: exact;
           print-color-adjust: exact;
-          line-height: 1.6;
+          line-height: 1.4;
         }
         .receipt-table td {
-          padding: ${isPurchase ? '8px 12px' : '6px 10px'};
-          text-align: right;
+          padding: ${isPurchase ? '10px 12px' : '6px 8px'};
+          text-align: center;
           vertical-align: middle;
           border: 1px solid #ddd;
-          font-size: ${isPurchase ? '16px' : '14px'};
+          font-size: ${isPurchase ? '14px' : '12px'};
           color: #333;
-          line-height: 1.6;
+          line-height: 1.4;
         }
         .summary-table {
           width: ${isPurchase ? '320px' : '260px'};
@@ -230,7 +230,7 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
         }
         .summary-table th, .summary-table td {
           border: none;
-          padding: ${isPurchase ? '10px 15px' : '6px 10px'};
+          padding: ${isPurchase ? '12px 20px' : '8px 15px'};
         }
         .summary-table th {
           background: transparent !important;
@@ -280,8 +280,11 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
 
   if (type === 'sale') {
     const sale = data as Sale;
-    const oldGoldDeduction = Math.round(sale.items.reduce((a, b) => a + (b.t < 0 ? Math.abs(b.t) : 0), 0));
-    const totalBill = sale.total + oldGoldDeduction;
+    const positiveItems = sale.items.filter(item => item.t > 0);
+    const billAmount = Math.round(positiveItems.reduce((acc, item) => acc + (item.w + (item.mk || 0)) * item.r, 0));
+    const mazdoriTotal = Math.round(positiveItems.reduce((acc, item) => acc + (item.t - (item.w + (item.mk || 0)) * item.r), 0));
+    const totalBill = billAmount + mazdoriTotal;
+    const oldGoldPrice = Math.round(sale.items.reduce((a, b) => a + (b.t < 0 ? Math.abs(b.t) : 0), 0));
 
     return (
       <div ref={ref} className="print-receipt-container bg-white text-zinc-900" dir="rtl" style={{ 
@@ -316,25 +319,29 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
           </div>
         </div>
 
-          <table className="receipt-table" style={{ marginBottom: '20px' }}>
+          <table className="receipt-table" style={{ marginBottom: '10px' }}>
             <tbody>
               <tr>
-                <th className="font-nastaliq" style={{ width: '15%', background: '#b8860b', color: 'white' }}>کسٹمر</th>
-                <td className="font-nastaliq" style={{ width: '35%', paddingRight: '15px' }}>{sale.name}</td>
-                <th className="font-nastaliq" style={{ width: '15%', background: '#b8860b', color: 'white' }}>موبائل</th>
-                <td className="font-mono" style={{ width: '35%' }} dir="ltr">{sale.phone}</td>
+                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>نام کسٹمر</th>
+                <td className="font-nastaliq font-bold" style={{ width: '32%', paddingRight: '15px' }}>{sale.name}</td>
+                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>فون نمبر</th>
+                <td className="font-mono" style={{ width: '32%' }} dir="ltr">{sale.phone}</td>
               </tr>
               <tr>
-                <th className="font-nastaliq" style={{ background: '#b8860b', color: 'white' }}>تاریخ</th>
-                <td>{sale.date}</td>
-                <th className="font-nastaliq" style={{ background: '#b8860b', color: 'white' }}>بل نمبر</th>
-                <td className="font-bold text-gold">#{1000 + (id || 0)}</td>
+                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>تاریخ</th>
+                <td className="font-mono" style={{ width: '32%' }}>{sale.date}</td>
+                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>بل نمبر</th>
+                <td className="font-mono font-bold text-gold" style={{ width: '32%' }}>#{1000 + (id || 0)}</td>
               </tr>
               <tr>
-                <th className="font-nastaliq" style={{ background: '#b8860b', color: 'white' }}>فی تولہ</th>
-                <td className="font-mono">{sale.items[0]?.r ? (sale.items[0].r * 12).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : '-'}</td>
-                <th className="font-nastaliq" style={{ background: '#b8860b', color: 'white' }}>فی گرام</th>
-                <td className="font-mono">{sale.items[0]?.r ? sale.items[0].r.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
+                <th className="font-nastaliq" style={{ background: '#b8860b', color: 'white' }}>فی تولہ ریٹ</th>
+                <td className="font-mono font-bold text-gold">
+                  {sale.items[0]?.r ? (sale.items[0].r * 12).toLocaleString() : '-'}
+                </td>
+                <th className="font-nastaliq" style={{ background: '#b8860b', color: 'white' }}>فی گرام ریٹ</th>
+                <td className="font-mono font-bold text-gold">
+                  {sale.items[0]?.r ? Math.round(sale.items[0].r).toLocaleString() : '-'}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -342,30 +349,28 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
           <table className="receipt-table" style={{ tableLayout: 'fixed', width: '100%' }}>
             <thead>
               <tr style={{ background: '#b8860b' }}>
-                <th className="font-nastaliq" style={{ width: '20%', background: '#b8860b', color: 'white' }}>تفصیل</th>
-                <th className="font-nastaliq" style={{ width: '8%', background: '#b8860b', color: 'white' }}>تعداد</th>
-                <th className="font-nastaliq" style={{ width: '12%', background: '#b8860b', color: 'white' }}>وزن</th>
-                <th className="font-nastaliq" style={{ width: '10%', background: '#b8860b', color: 'white' }}>پالش</th>
-                <th className="font-nastaliq" style={{ width: '14%', background: '#b8860b', color: 'white' }}>کل وزن</th>
-                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>کل قیمت</th>
-                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>تصویر</th>
+                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>تفصیل</th>
+                <th className="font-nastaliq" style={{ width: '14%', background: '#b8860b', color: 'white' }}>تعداد</th>
+                <th className="font-nastaliq" style={{ width: '17%', background: '#b8860b', color: 'white' }}>وزن</th>
+                <th className="font-nastaliq" style={{ width: '17%', background: '#b8860b', color: 'white' }}>پالش</th>
+                <th className="font-nastaliq" style={{ width: '17%', background: '#b8860b', color: 'white' }}>کل وزن</th>
+                <th className="font-nastaliq" style={{ width: '17%', background: '#b8860b', color: 'white' }}>تصویر</th>
               </tr>
             </thead>
             <tbody>
               {sale.items.map((item, i) => (
                 <tr key={i}>
-                  <td className="text-right font-bold font-nastaliq" style={{ paddingRight: '15px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.n}</td>
+                  <td className="text-center font-bold font-nastaliq" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.n}</td>
                   <td className="font-mono">{item.t < 0 ? '-' : (item.p || 1)}</td>
                   <td className="font-mono font-bold">{parseFloat(Number(item.w).toFixed(2))}g</td>
                   <td className="font-mono">{parseFloat(Number(item.mk).toFixed(2))}g</td>
                   <td className="font-mono font-bold">{parseFloat(Number(item.w + item.mk).toFixed(2))}g</td>
-                  <td className="font-bold font-mono">{Math.round(item.t).toLocaleString()}</td>
-                  <td style={{ padding: '8px', verticalAlign: 'middle' }}>
+                  <td style={{ padding: '4px', verticalAlign: 'middle' }}>
                     {item.img ? (
                       <img 
                         src={item.img} 
                         alt="" 
-                        style={{ height: '85px', maxHeight: '85px', width: 'auto', maxWidth: '100%', objectFit: 'contain', margin: '0 auto' }} 
+                        style={{ height: '65px', maxHeight: '65px', width: 'auto', maxWidth: '100%', objectFit: 'contain', margin: '0 auto' }} 
                         className="rounded border border-zinc-200 shadow-sm"
                       />
                     ) : (
@@ -381,12 +386,20 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
             <table className="summary-table" style={{ marginLeft: 'auto' }}>
               <tbody>
                 <tr>
-                  <th className="font-nastaliq">کل بل رقم</th>
+                  <th className="font-nastaliq">بل رقم</th>
+                  <td className="font-mono">{billAmount.toLocaleString()}</td>
+                </tr>
+                <tr>
+                  <th className="font-nastaliq">مزدوری</th>
+                  <td className="font-mono">{mazdoriTotal.toLocaleString()}</td>
+                </tr>
+                <tr className="bg-zinc-50 font-bold">
+                  <th className="font-nastaliq">کل بل</th>
                   <td className="font-mono">{totalBill.toLocaleString()}</td>
                 </tr>
                 <tr className="text-red-700">
-                  <th className="font-nastaliq">پرانا سونا منہا (-)</th>
-                  <td className="font-mono">{oldGoldDeduction.toLocaleString()}</td>
+                  <th className="font-nastaliq">پرانا سونا قیمت (-)</th>
+                  <td className="font-mono">{oldGoldPrice.toLocaleString()}</td>
                 </tr>
                 <tr className="text-green-700">
                   <th className="font-nastaliq">وصول شدہ رقم</th>
@@ -526,32 +539,36 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
           <table className="receipt-table" style={{ marginBottom: '10px' }}>
             <tbody>
               <tr>
-                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white', padding: '10px' }}>آرڈر نمبر</th>
-                <td className="font-mono font-bold text-gold" style={{ width: '32%' }}>#{order.id || id || ''}</td>
-                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white', padding: '10px' }}>تاریخ بکنگ</th>
-                <td className="font-mono" style={{ width: '32%' }}>{order.date}</td>
-              </tr>
-              <tr>
-                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white', padding: '10px' }}>نام کسٹمر</th>
+                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>نام کسٹمر</th>
                 <td className="font-nastaliq font-bold" style={{ width: '32%', paddingRight: '10px' }}>{order.name}</td>
-                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white', padding: '10px' }}>فون نمبر</th>
+                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>فون نمبر</th>
                 <td className="font-mono" style={{ width: '32%' }} dir="ltr">{order.phone}</td>
               </tr>
               <tr>
-                <th className="font-nastaliq" style={{ background: '#b8860b', color: 'white', padding: '10px' }}>تاریخ واپسی</th>
-                <td className="font-mono font-bold text-red-600" colSpan={3}>{order.due}</td>
+                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>تاریخ بکنگ</th>
+                <td className="font-mono" style={{ width: '32%' }}>{order.date}</td>
+                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>تاریخ واپسی</th>
+                <td className="font-mono font-bold text-red-600" style={{ width: '32%' }}>{order.due}</td>
               </tr>
               <tr>
-                <th className="font-nastaliq" style={{ background: '#b8860b', color: 'white', padding: '10px' }}>نام آئٹم</th>
+                <th className="font-nastaliq" style={{ background: '#b8860b', color: 'white' }}>نام آئٹم</th>
                 <td className="font-nastaliq font-bold" style={{ paddingRight: '10px' }}>{order.item}</td>
-                <th className="font-nastaliq" style={{ background: '#b8860b', color: 'white', padding: '10px' }}>نام کاریگر</th>
+                <th className="font-nastaliq" style={{ background: '#b8860b', color: 'white' }}>نام کاریگر</th>
                 <td className="font-nastaliq" style={{ paddingRight: '10px' }}>{order.karigar}</td>
               </tr>
               <tr>
-                <th className="font-nastaliq" style={{ background: '#b8860b', color: 'white', padding: '10px' }}>پیمائش</th>
-                <td className="font-mono font-bold">{order.measurements || '-'}</td>
-                <th className="font-nastaliq" style={{ background: '#b8860b', color: 'white', padding: '10px' }}>فی تولہ ریٹ</th>
+                <th className="font-nastaliq" style={{ background: '#b8860b', color: 'white' }}>فی تولہ ریٹ</th>
                 <td className="font-mono font-bold text-gold">{order.pricePerTola || '-'}</td>
+                <th className="font-nastaliq" style={{ background: '#b8860b', color: 'white' }}>فی گرام ریٹ</th>
+                <td className="font-mono font-bold text-gold">
+                  {order.pricePerTola ? Math.round(parseFloat(order.pricePerTola.replace(/,/g, '')) / 12).toLocaleString() : '-'}
+                </td>
+              </tr>
+              <tr>
+                <th className="font-nastaliq" style={{ background: '#b8860b', color: 'white' }}>پیمائش</th>
+                <td className="font-mono font-bold" style={{ width: '32%' }}>{order.measurements || '-'}</td>
+                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>آرڈر نمبر</th>
+                <td className="font-mono font-bold text-gold" style={{ width: '32%' }}>#{order.id || id || ''}</td>
               </tr>
             </tbody>
           </table>
@@ -561,10 +578,11 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
             <table className="receipt-table" style={{ tableLayout: 'fixed', width: '100%', marginBottom: '10px' }}>
               <thead>
                 <tr style={{ background: '#b8860b' }}>
-                  <th className="font-nastaliq" style={{ width: '25%', background: '#b8860b', color: 'white', padding: '10px' }}>پرانا وزن</th>
-                  <th className="font-nastaliq" style={{ width: '25%', background: '#b8860b', color: 'white', padding: '10px' }}>وزن / تیار وزن</th>
-                  <th className="font-nastaliq" style={{ width: '25%', background: '#b8860b', color: 'white', padding: '10px' }}>پالش</th>
-                  <th className="font-nastaliq" style={{ width: '25%', background: '#b8860b', color: 'white', padding: '10px' }}>ٹوٹل وزن</th>
+                  <th className="font-nastaliq" style={{ width: '20%', background: '#b8860b', color: 'white', padding: '10px' }}>کسٹمر گولڈ</th>
+                  <th className="font-nastaliq" style={{ width: '20%', background: '#b8860b', color: 'white', padding: '10px' }}>وزن</th>
+                  <th className="font-nastaliq" style={{ width: '20%', background: '#b8860b', color: 'white', padding: '10px' }}>پالش</th>
+                  <th className="font-nastaliq" style={{ width: '20%', background: '#b8860b', color: 'white', padding: '10px' }}>ٹوٹل وزن</th>
+                  <th className="font-nastaliq" style={{ width: '20%', background: '#b8860b', color: 'white', padding: '10px' }}>اضافی وزن</th>
                 </tr>
               </thead>
               <tbody>
@@ -573,6 +591,11 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
                   <td className="font-mono font-bold" style={{ padding: '8px' }}>{order.readyWt ? `${parseFloat(Number(order.readyWt).toFixed(2))}g` : '-'}</td>
                   <td className="font-bold font-nastaliq" style={{ padding: '8px' }}>{order.makingCharges || '-'}</td>
                   <td className="font-mono font-bold" style={{ padding: '8px' }}>{order.totalWt ? `${parseFloat(Number(order.totalWt).toFixed(2))}g` : '-'}</td>
+                  <td className="font-mono font-bold" style={{ padding: '8px', color: '#dc2626' }}>
+                    {order.totalWt && order.oldWt && (parseFloat(order.totalWt) - parseFloat(order.oldWt) > 0) 
+                      ? `${Math.round(parseFloat(order.totalWt) - parseFloat(order.oldWt))}g` 
+                      : '-'}
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -614,6 +637,18 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
           <div className="flex justify-start mt-2">
             <table className="summary-table" style={{ marginLeft: 'auto', marginBottom: '8px' }}>
               <tbody>
+                {order.price !== undefined && order.price > 0 && (
+                  <tr>
+                    <td className="font-nastaliq" style={{ padding: '6px' }}>قیمت</td>
+                    <td className="font-mono" style={{ padding: '6px' }}>{order.price.toLocaleString()}</td>
+                  </tr>
+                )}
+                {order.mazdori !== undefined && order.mazdori > 0 && (
+                  <tr>
+                    <td className="font-nastaliq" style={{ padding: '6px' }}>مزدوری</td>
+                    <td className="font-mono" style={{ padding: '6px' }}>{order.mazdori.toLocaleString()}</td>
+                  </tr>
+                )}
                 <tr>
                   <td className="font-nastaliq" style={{ padding: '6px' }}>ٹوٹل</td>
                   <td className="font-mono font-bold" style={{ padding: '6px' }}>{order.total?.toLocaleString() || '-'}</td>
@@ -752,35 +787,37 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
             <div className="bg-zinc-100 px-3 py-1 mt-4 font-bold rounded-lg text-gold text-lg font-nastaliq border border-gold-20 inline-block">ریپیئرنگ رسید</div>
           </div>
 
-          <table className="receipt-table">
+          <table className="receipt-table" style={{ marginBottom: '10px' }}>
             <tbody>
               <tr>
-                <th className="font-nastaliq" style={{ width: '20%' }}>کسٹمر</th>
-                <td className="font-bold" style={{ width: '30%' }}>{repair.customerName}</td>
-                <th className="font-nastaliq" style={{ width: '20%' }}>تاریخ</th>
-                <td className="font-bold" style={{ width: '30%' }} dir="ltr">{formatDate(repair.date, 'ur-PK')}</td>
+                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>نام کسٹمر</th>
+                <td className="font-nastaliq font-bold" style={{ width: '32%', paddingRight: '10px' }}>{repair.customerName}</td>
+                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>فون نمبر</th>
+                <td className="font-mono" style={{ width: '32%' }} dir="ltr">{repair.customerPhone}</td>
               </tr>
               <tr>
-                <th className="font-nastaliq">فون</th>
-                <td className="font-bold" dir="ltr">{repair.customerPhone}</td>
-                <th className="font-nastaliq">حالت</th>
-                <td className="font-bold">{repair.status === 'Done' ? 'تیار ہے' : 'انتظار'}</td>
+                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>تاریخ</th>
+                <td className="font-mono" style={{ width: '32%' }}>{formatDate(repair.date, 'ur-PK')}</td>
+                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>حالت</th>
+                <td className="font-nastaliq font-bold text-gold" style={{ width: '32%' }}>{repair.status === 'Done' ? 'تیار ہے' : 'انتظار'}</td>
+              </tr>
+              <tr>
+                <th className="font-nastaliq" style={{ background: '#b8860b', color: 'white' }}>نام آئٹم</th>
+                <td className="font-nastaliq font-bold" style={{ paddingRight: '10px' }}>{repair.item}</td>
+                <th className="font-nastaliq" style={{ background: '#b8860b', color: 'white' }}>ریپیئر نمبر</th>
+                <td className="font-mono font-bold text-gold">#{id || ''}</td>
+              </tr>
+              <tr>
+                <th className="font-nastaliq" style={{ background: '#b8860b', color: 'white' }}>مسئلہ</th>
+                <td className="font-nastaliq font-bold" colSpan={3} style={{ paddingRight: '10px' }}>{repair.issue}</td>
               </tr>
             </tbody>
           </table>
 
-          <table className="receipt-table" style={{ marginTop: '20px' }}>
+          <table className="receipt-table" style={{ marginTop: '10px' }}>
             <tbody>
-              <tr>
-                <th className="font-nastaliq" style={{ width: '25%', background: '#f9f9f9' }}>آئٹم</th>
-                <td className="font-nastaliq" style={{ width: '75%', textAlign: 'right', paddingRight: '15px' }}>{repair.item}</td>
-              </tr>
-              <tr>
-                <th className="font-nastaliq" style={{ background: '#f9f9f9' }}>مسئلہ</th>
-                <td className="font-nastaliq" style={{ textAlign: 'right', paddingRight: '15px' }}>{repair.issue}</td>
-              </tr>
               <tr className="final-total-row">
-                <th className="font-nastaliq font-black">رقم</th>
+                <th className="font-nastaliq font-black" style={{ background: '#b8860b', color: 'white' }}>کل رقم</th>
                 <td className="font-bold text-red-700 font-mono" style={{ textAlign: 'right', paddingRight: '15px', fontSize: '20px' }}>{repair.charges.toLocaleString()}</td>
               </tr>
             </tbody>
@@ -843,37 +880,31 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
             <div className="bg-zinc-100 px-3 py-1 mt-4 font-bold rounded-lg text-gold text-lg font-nastaliq border border-gold-20 inline-block">کاریگر رسید</div>
           </div>
 
-          <table className="receipt-table">
+          <table className="receipt-table" style={{ marginBottom: '10px' }}>
             <tbody>
               <tr>
-                <th className="font-nastaliq" style={{ width: '25%' }}>کاریگر</th>
-                <td className="font-nastaliq" style={{ width: '25%' }}>{karigar.name}</td>
-                <th className="font-nastaliq" style={{ width: '25%' }}>تاریخ</th>
-                <td className="font-mono" style={{ width: '25%' }}>{karigar.date}</td>
+                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>نام کاریگر</th>
+                <td className="font-nastaliq font-bold" style={{ width: '32%', paddingRight: '10px' }}>{karigar.name}</td>
+                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>فون نمبر</th>
+                <td className="font-mono" style={{ width: '32%' }} dir="ltr">{karigar.phone}</td>
               </tr>
               <tr>
-                <th className="font-nastaliq">فون</th>
-                <td colSpan={3} className="font-mono" dir="ltr">{karigar.phone}</td>
+                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>تاریخ</th>
+                <td className="font-mono" style={{ width: '32%' }}>{karigar.date}</td>
+                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>ٹاسک</th>
+                <td className="font-nastaliq font-bold text-gold" style={{ width: '32%', paddingRight: '10px' }}>{karigar.task}</td>
               </tr>
             </tbody>
           </table>
 
-          <table className="receipt-table" style={{ marginTop: '15px' }}>
-            <tbody>
-              <tr>
-                <th className="font-nastaliq" style={{ width: '25%', background: '#f9f9f9' }}>ٹاسک (Task)</th>
-                <td className="font-nastaliq" style={{ width: '75%', textAlign: 'right', paddingRight: '15px' }}>{karigar.task}</td>
-              </tr>
-            </tbody>
-          </table>
           <div className="mt-4">
             <table className="receipt-table">
               <thead>
-                <tr>
-                  <th className="font-nastaliq" style={{ width: '25%' }}>دیا گیا</th>
-                  <th className="font-nastaliq" style={{ width: '25%' }}>وصول</th>
-                  <th className="font-nastaliq" style={{ width: '25%' }}>کاٹ</th>
-                  <th className="font-nastaliq" style={{ width: '25%' }}>صاف بقایا</th>
+                <tr style={{ background: '#b8860b' }}>
+                  <th className="font-nastaliq" style={{ width: '25%', background: '#b8860b', color: 'white' }}>دیا گیا</th>
+                  <th className="font-nastaliq" style={{ width: '25%', background: '#b8860b', color: 'white' }}>وصول</th>
+                  <th className="font-nastaliq" style={{ width: '25%', background: '#b8860b', color: 'white' }}>کاٹ</th>
+                  <th className="font-nastaliq" style={{ width: '25%', background: '#b8860b', color: 'white' }}>صاف بقایا</th>
                 </tr>
               </thead>
               <tbody>
@@ -942,31 +973,23 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
             <div className="bg-zinc-100 px-3 py-1 mt-4 font-bold rounded-lg text-gold text-lg font-nastaliq border border-gold-20 inline-block">اسٹاک رسید</div>
           </div>
 
-          <table className="receipt-table" style={{ marginTop: '20px' }}>
+          <table className="receipt-table" style={{ marginBottom: '10px' }}>
             <tbody>
               <tr>
-                <th className="font-nastaliq" style={{ width: '25%', background: '#f9f9f9' }}>آئٹم</th>
-                <td className="font-bold text-xl font-nastaliq" style={{ width: '75%' }}>{stock.name}</td>
+                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>نام آئٹم</th>
+                <td className="font-nastaliq font-bold" style={{ width: '32%', paddingRight: '10px' }}>{stock.name}</td>
+                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>ٹائپ</th>
+                <td className="font-nastaliq font-bold text-gold" style={{ width: '32%', paddingRight: '10px' }}>{stock.type}</td>
+              </tr>
+              <tr>
+                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>صاف وزن</th>
+                <td className="font-mono font-bold" style={{ width: '32%' }}>{stock.quantity} {stock.unit}</td>
+                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>تعداد</th>
+                <td className="font-mono font-bold text-gold" style={{ width: '32%' }}>{stock.pieces || 0} pcs</td>
               </tr>
             </tbody>
           </table>
           <div className="mt-4">
-            <table className="receipt-table">
-            <thead>
-              <tr>
-                <th className="font-nastaliq" style={{ width: '33%' }}>ٹائپ</th>
-                <th className="font-nastaliq" style={{ width: '33%' }}>صاف وزن</th>
-                <th className="font-nastaliq" style={{ width: '34%' }}>تعداد</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td className="font-nastaliq">{stock.type}</td>
-                <td className="font-bold text-lg font-mono">{stock.quantity} {stock.unit}</td>
-                <td className="font-bold text-lg font-mono">{stock.pieces || 0} pcs</td>
-              </tr>
-            </tbody>
-          </table>
         </div>
 
           {stock.img && (
@@ -1024,26 +1047,32 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
           <div className="bg-zinc-100 px-3 py-1 mt-4 font-bold rounded-lg text-gold text-lg font-nastaliq border border-gold-20 inline-block">پرانا سونا خریداری رسید</div>
         </div>
 
-        <table className="receipt-table">
+        <table className="receipt-table" style={{ marginBottom: '10px' }}>
           <tbody>
             <tr>
-              <th className="font-nastaliq" style={{ width: '20%' }}>بیچنے والے کا نام</th>
-              <td className="font-bold font-nastaliq" style={{ width: '30%' }}>{purchase.name}</td>
-              <th className="font-nastaliq" style={{ width: '20%' }}>فون نمبر</th>
-              <td className="font-bold" style={{ width: '30%' }} dir="ltr">{purchase.phone}</td>
+              <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>فروخت کنندہ</th>
+              <td className="font-nastaliq font-bold" style={{ width: '32%', paddingRight: '10px' }}>{purchase.name}</td>
+              <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>فون نمبر</th>
+              <td className="font-mono" style={{ width: '32%' }} dir="ltr">{purchase.phone}</td>
             </tr>
             <tr>
-              <th className="font-nastaliq">تاریخ</th>
-              <td>{purchase.date}</td>
-              <th className="font-nastaliq">رسید نمبر</th>
-              <td className="font-bold text-gold">#{5000 + (id || 0)}</td>
+              <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>تاریخ</th>
+              <td className="font-mono" style={{ width: '32%' }}>{purchase.date}</td>
+              <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>رسید نمبر</th>
+              <td className="font-mono font-bold text-gold" style={{ width: '32%' }}>#{5000 + (id || 0)}</td>
+            </tr>
+            <tr>
+              <th className="font-nastaliq" style={{ background: '#b8860b', color: 'white' }}>فی تولہ ریٹ</th>
+              <td className="font-mono font-bold text-gold">{purchase.rate.toLocaleString()}</td>
+              <th className="font-nastaliq" style={{ background: '#b8860b', color: 'white' }}>فی گرام ریٹ</th>
+              <td className="font-mono font-bold text-gold">{Math.round(purchase.rate / 12).toLocaleString()}</td>
             </tr>
           </tbody>
         </table>
 
         <table className="receipt-table" style={{ marginTop: '20px' }}>
           <thead>
-            <tr>
+            <tr style={{ background: '#b8860b' }}>
               <th className="font-nastaliq" style={{ width: '30%', background: '#b8860b', color: 'white' }}>آئٹم</th>
               <th className="font-nastaliq" style={{ width: '20%', background: '#b8860b', color: 'white' }}>وزن</th>
               <th className="font-nastaliq" style={{ width: '25%', background: '#b8860b', color: 'white' }}>ریٹ</th>

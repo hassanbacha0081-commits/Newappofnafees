@@ -41,6 +41,8 @@ export default function Orders({ lang }: OrdersProps) {
     karigar: '',
     oldWt: '',
     readyWt: '',
+    price: 0,
+    mazdori: 0,
     total: 0,
     recAmt: 0,
     status: 'pending',
@@ -174,21 +176,43 @@ export default function Orders({ lang }: OrdersProps) {
   const [qistAmount, setQistAmount] = useState<string>('');
   const [selectedOrderForQist, setSelectedOrderForQist] = useState<Order | null>(null);
 
-  const orders = useLiveQuery(() => {
-    if (!db.orders) return Promise.resolve([]);
-    if (!searchTerm) return db.orders.orderBy('id').reverse().toArray();
+  const orders = useLiveQuery(async () => {
+    if (!db.orders) return [];
     
-    const term = searchTerm.toLowerCase();
-    return db.orders
-      .filter(o => 
-        o.name.toLowerCase().includes(term) || 
-        o.phone.includes(searchTerm) ||
-        o.karigar.toLowerCase().includes(term) ||
-        o.id?.toString() === searchTerm
-      )
-      .reverse()
-      .toArray();
+    let result: Order[];
+    if (!searchTerm) {
+      result = await db.orders.orderBy('id').reverse().toArray();
+    } else {
+      const term = searchTerm.toLowerCase();
+      result = await db.orders
+        .filter(o => 
+          o.name.toLowerCase().includes(term) || 
+          o.phone.includes(searchTerm) ||
+          o.karigar.toLowerCase().includes(term) ||
+          o.id?.toString() === searchTerm
+        )
+        .reverse()
+        .toArray();
+    }
+
+    const statusOrder: Record<string, number> = {
+      'pending': 1,
+      'progress': 2,
+      'complete': 3,
+      'delivered': 4
+    };
+
+    return result.sort((a, b) => {
+      const valA = statusOrder[a.status] || 99;
+      const valB = statusOrder[b.status] || 99;
+      if (valA !== valB) return valA - valB;
+      return (b.id || 0) - (a.id || 0); // Keep newest first within same status
+    });
   }, [searchTerm]);
+
+  const totalOrdersWeight = orders?.reduce((sum, o) => sum + (parseFloat(o.readyWt) || 0), 0) || 0;
+  const totalOrdersPolish = orders?.reduce((sum, o) => sum + (parseFloat(o.makingCharges || '0') || 0), 0) || 0;
+  const totalOrdersMazdori = orders?.reduce((sum, o) => sum + (o.mazdori || 0), 0) || 0;
 
   const updateRem = () => {
     if (editId) { return formData.total - formData.payments.reduce((s, p) => s + p.amt, 0); } return formData.total - formData.recAmt;
@@ -221,6 +245,8 @@ export default function Orders({ lang }: OrdersProps) {
       karigar: formData.karigar,
       oldWt: formData.oldWt ? parseFloat(Number(formData.oldWt).toFixed(2)).toString() : '',
       readyWt: formData.readyWt ? parseFloat(Number(formData.readyWt).toFixed(2)).toString() : '',
+      price: formData.price,
+      mazdori: formData.mazdori,
       total: formData.total,
       payments: editId ? formData.payments : [{ amt: formData.recAmt, date: formatDate(new Date(), 'ur-PK') }],
       rem: updateRem(),
@@ -267,6 +293,8 @@ export default function Orders({ lang }: OrdersProps) {
       karigar: '',
       oldWt: '',
       readyWt: '',
+      price: 0,
+      mazdori: 0,
       total: 0,
       recAmt: 0,
       status: 'pending',
@@ -290,6 +318,8 @@ export default function Orders({ lang }: OrdersProps) {
       karigar: order.karigar,
       oldWt: order.oldWt,
       readyWt: order.readyWt,
+      price: order.price || 0,
+      mazdori: order.mazdori || 0,
       total: order.total,
       recAmt: order.total - order.rem,
       status: order.status,
@@ -516,6 +546,22 @@ export default function Orders({ lang }: OrdersProps) {
         </button>
       </div>
 
+      {/* Stats Block */}
+      <div className="flex gap-6 p-4 bg-white border border-sky-200 rounded-xl shadow-sm overflow-x-auto mb-6">
+        <div className="flex flex-col flex-shrink-0 min-w-32">
+          <span className="text-xs text-zinc-500 urdu-text font-bold">{lang === 'ur' ? 'کل وزن:' : 'Total Weight:'}</span>
+          <span className="text-2xl font-black text-gold-dark">{totalOrdersWeight.toFixed(3)}g</span>
+        </div>
+        <div className="flex flex-col flex-shrink-0 min-w-32 border-l border-sky-100 pl-6">
+          <span className="text-xs text-zinc-500 urdu-text font-bold">{lang === 'ur' ? 'کل پالش:' : 'Total Polish:'}</span>
+          <span className="text-2xl font-black text-sky-700">{totalOrdersPolish.toFixed(3)}g</span>
+        </div>
+        <div className="flex flex-col flex-shrink-0 min-w-32 border-l border-sky-100 pl-6">
+          <span className="text-xs text-zinc-500 urdu-text font-bold">{lang === 'ur' ? 'کل مزدوری:' : 'Total Mazdori:'}</span>
+          <span className="text-2xl font-black text-green-600">Rs. {Math.round(totalOrdersMazdori).toLocaleString()}</span>
+        </div>
+      </div>
+
       {isAdding && (
         <div className="bg-white p-6 rounded-xl shadow-sm border-t-4 border-gold mb-6 animate-in fade-in slide-in-from-top-4 duration-300 border border-sky-200">
           <h3 className="text-xl font-bold mb-4 urdu-text text-gold-dark"><i className="fas fa-gem"></i> نیا آرڈر بکنگ</h3>
@@ -588,11 +634,11 @@ export default function Orders({ lang }: OrdersProps) {
             <div className="col-span-1 md:col-span-2 border-t pt-4 mt-2">
               <h4 className="font-bold text-sm text-sky-900 urdu-text flex items-center gap-1.5 uppercase tracking-wide">
                 <span className="w-1.5 h-3.5 bg-gold rounded-full inline-block"></span>
-                {lang === 'ur' ? 'وزن / تیار وزن (Weight/Tayar Weight)' : 'Weight/Tayar Weight'}
+                {lang === 'ur' ? 'وزن (Weight)' : 'Weight'}
               </h4>
             </div>
             <div className="space-y-1">
-              <label className="text-xs text-zinc-500 urdu-text">{lang === 'ur' ? 'پرانا وزن (g):' : 'Purana Wazan (g):'}</label>
+              <label className="text-xs text-zinc-500 urdu-text">{lang === 'ur' ? 'کسٹمر گولڈ (g):' : 'Customer Gold (g):'}</label>
               <input 
                 type="number" 
                 step="any"
@@ -603,7 +649,7 @@ export default function Orders({ lang }: OrdersProps) {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs text-zinc-500 urdu-text">{lang === 'ur' ? 'وزن / تیار وزن (g):' : 'Weight/Tayar Weight (g):'}</label>
+              <label className="text-xs text-zinc-500 urdu-text">{lang === 'ur' ? 'وزن (g):' : 'Weight (g):'}</label>
               <input 
                 type="number" 
                 step="any"
@@ -653,6 +699,21 @@ export default function Orders({ lang }: OrdersProps) {
                 onChange={e => setFormData({ ...formData, totalWt: e.target.value })}
                 className="w-full p-3 bg-white border border-sky-200 rounded-lg outline-none focus:border-gold text-black"
                 placeholder="e.g. 6.70"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-zinc-500 urdu-text">{lang === 'ur' ? 'اضافی وزن (Izafi Weight):' : 'Izafi Weight:'}</label>
+              <input 
+                type="number" 
+                step="any"
+                readOnly
+                value={
+                  (parseFloat(formData.totalWt || '0') - parseFloat(formData.oldWt || '0')) > 0 
+                  ? Math.round(parseFloat(formData.totalWt || '0') - parseFloat(formData.oldWt || '0')).toString()
+                  : ''
+                }
+                className="w-full p-3 bg-zinc-50 border border-sky-200 rounded-lg outline-none text-zinc-500 font-bold"
+                placeholder="Auto Calculated"
               />
             </div>
 
@@ -717,7 +778,33 @@ export default function Orders({ lang }: OrdersProps) {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs text-zinc-500 urdu-text">کل رقم (Total):</label>
+              <label className="text-xs text-zinc-500 urdu-text">{lang === 'ur' ? 'قیمت (Price):' : 'Price:'}</label>
+              <input 
+                type="number" 
+                value={formData.price || ''}
+                onChange={e => {
+                  const p = Number(e.target.value);
+                  setFormData({ ...formData, price: p, total: p + (formData.mazdori || 0) });
+                }}
+                className="w-full p-3 bg-white border border-sky-200 rounded-lg outline-none focus:border-gold text-black"
+                placeholder="e.g. 45000"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-zinc-500 urdu-text">{lang === 'ur' ? 'مزدوری (Mazdori):' : 'Mazdori:'}</label>
+              <input 
+                type="number" 
+                value={formData.mazdori || ''}
+                onChange={e => {
+                  const m = Number(e.target.value);
+                  setFormData({ ...formData, mazdori: m, total: (formData.price || 0) + m });
+                }}
+                className="w-full p-3 bg-white border border-sky-200 rounded-lg outline-none focus:border-gold text-black"
+                placeholder="e.g. 5000"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-zinc-500 urdu-text">کل رقم (Total Price):</label>
               <input 
                 type="number" 
                 value={formData.total || ''}
@@ -846,13 +933,13 @@ export default function Orders({ lang }: OrdersProps) {
               )}
               {order.oldWt && (
                 <div className="flex justify-between text-sky-800 bg-sky-50 px-2 py-1 rounded-md border border-sky-100">
-                  <span className="urdu-text text-xs">{lang === 'ur' ? 'پرانا وزن:' : 'Purana Wazan:'}</span>
+                  <span className="urdu-text text-xs">{lang === 'ur' ? 'کسٹمر گولڈ:' : 'Customer Gold:'}</span>
                   <span className="font-bold text-xs">{order.oldWt}g</span>
                 </div>
               )}
               {order.readyWt && (
                 <div className="flex justify-between text-zinc-800 bg-zinc-50 px-2 py-1 rounded-md border border-zinc-100">
-                  <span className="urdu-text text-xs">{lang === 'ur' ? 'وزن / تیار وزن:' : 'Weight/Tayar Weight:'}</span>
+                  <span className="urdu-text text-xs">{lang === 'ur' ? 'وزن:' : 'Weight:'}</span>
                   <span className="font-bold text-xs">{order.readyWt}g</span>
                 </div>
               )}
@@ -866,6 +953,12 @@ export default function Orders({ lang }: OrdersProps) {
                 <div className="flex justify-between text-emerald-800 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100">
                   <span className="urdu-text text-xs">{lang === 'ur' ? 'ٹوٹل وزن:' : 'Total Wazan:'}</span>
                   <span className="font-bold text-xs">{order.totalWt}g</span>
+                </div>
+              )}
+              {order.totalWt && order.oldWt && (parseFloat(order.totalWt) - parseFloat(order.oldWt) > 0) && (
+                <div className="flex justify-between text-red-800 bg-red-50 px-2 py-1 rounded-md border border-red-100">
+                  <span className="urdu-text text-xs">{lang === 'ur' ? 'اضافی وزن:' : 'Izafi Wazan:'}</span>
+                  <span className="font-bold text-xs">{Math.round(parseFloat(order.totalWt) - parseFloat(order.oldWt))}g</span>
                 </div>
               )}
               {order.img && (
@@ -883,6 +976,18 @@ export default function Orders({ lang }: OrdersProps) {
                 <span className="text-zinc-500 urdu-text">کاریگر:</span>
                 <span className="font-bold text-zinc-700">{order.karigar}</span>
               </div>
+              {order.price !== undefined && order.price > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-zinc-500 urdu-text">قیمت (Price):</span>
+                  <span className="font-bold text-zinc-700">{formatCurrency(order.price)}</span>
+                </div>
+              )}
+              {order.mazdori !== undefined && order.mazdori > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-zinc-500 urdu-text">مزدوری (Mazdori):</span>
+                  <span className="font-bold text-zinc-700">{formatCurrency(order.mazdori)}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-zinc-500 urdu-text">واپسی:</span>
                 <span className="font-bold text-zinc-700">{order.due}</span>

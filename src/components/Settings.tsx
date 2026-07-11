@@ -43,7 +43,7 @@ export default function Settings({ lang, setGoldRate, setLang }: SettingsProps) 
     shopPhone2: translations.ur.shopPhone2,
     printShiftX: 0,
     printShiftY: 0,
-    weeklyBackupReminder: false,
+    autoBackupFrequency: 'none',
     appPin: ''
   });
 
@@ -56,7 +56,7 @@ export default function Settings({ lang, setGoldRate, setLang }: SettingsProps) 
       const phone2Data = await db.settings.get('shopPhone2');
       const shiftXData = await db.settings.get('printShiftX');
       const shiftYData = await db.settings.get('printShiftY');
-      const backupReminderData = await db.settings.get('weeklyBackupReminder');
+      const backupFreqData = await db.settings.get('autoBackupFrequency');
       const appPinData = await db.settings.get('appPin');
       
       setCurrentSettings({
@@ -67,7 +67,7 @@ export default function Settings({ lang, setGoldRate, setLang }: SettingsProps) 
         shopPhone2: phone2Data?.value || translations[lang].shopPhone2,
         printShiftX: shiftXData?.value || 0,
         printShiftY: shiftYData?.value || 0,
-        weeklyBackupReminder: backupReminderData?.value || false,
+        autoBackupFrequency: backupFreqData?.value || 'none',
         appPin: appPinData?.value || ''
       });
     };
@@ -531,24 +531,29 @@ export default function Settings({ lang, setGoldRate, setLang }: SettingsProps) 
               {lang === 'ur' ? 'بیک اپ اور ڈیٹا مینجمنٹ' : 'Backup & Data Management'}
             </h3>
 
-            <div className="flex items-center justify-between p-4 bg-sky-50 rounded-xl border border-sky-100 mt-4 mb-4">
+            <div className="p-4 bg-sky-50 rounded-xl border border-sky-100 mt-4 mb-4">
               <div>
-                <p className="font-bold text-sky-900 urdu-text">{lang === 'ur' ? 'ہفتہ وار بیک اپ یاددہانی' : 'Weekly Backup Reminder'}</p>
-                <p className="text-xs text-sky-600 urdu-text mt-1">{lang === 'ur' ? 'ڈیٹا محفوظ رکھنے کے لئے ہر ہفتے یاددہانی موصول کریں' : 'Get a reminder every week to backup your data'}</p>
+                <p className="font-bold text-sky-900 urdu-text">{lang === 'ur' ? 'آٹو بیک اپ سیٹنگ' : 'Auto Backup Setting'}</p>
+                <p className="text-xs text-sky-600 urdu-text mt-1">{lang === 'ur' ? 'منتخب کردہ وقت کے بعد ایپ خودکار بیک اپ لے گی' : 'App will automatically backup data after the selected time'}</p>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  className="sr-only peer" 
-                  checked={currentSettings.weeklyBackupReminder}
+              <div className="mt-3">
+                <select 
+                  className="w-full p-3 bg-white border border-sky-200 rounded-lg outline-none focus:border-gold text-black"
+                  value={currentSettings.autoBackupFrequency}
                   onChange={async (e) => {
-                    const isChecked = e.target.checked;
-                    await db.settings.put({ key: 'weeklyBackupReminder', value: isChecked });
-                    setCurrentSettings(prev => ({ ...prev, weeklyBackupReminder: isChecked }));
+                    const val = e.target.value;
+                    await db.settings.put({ key: 'autoBackupFrequency', value: val });
+                    // Also reset last backup date when changing frequency to start the timer from now
+                    await db.settings.put({ key: 'lastBackupDate', value: new Date().toISOString() });
+                    setCurrentSettings(prev => ({ ...prev, autoBackupFrequency: val }));
                   }}
-                />
-                <div className="w-11 h-6 bg-zinc-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-sky-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sky-500"></div>
-              </label>
+                >
+                  <option value="none">{lang === 'ur' ? 'کوئی نہیں (None)' : 'None'}</option>
+                  <option value="7">{lang === 'ur' ? 'ہفتہ وار (Weekly)' : 'Weekly'}</option>
+                  <option value="15">{lang === 'ur' ? '15 دن بعد (15 Days)' : '15 Days'}</option>
+                  <option value="30">{lang === 'ur' ? 'ماہانہ (Monthly)' : 'Monthly'}</option>
+                </select>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
