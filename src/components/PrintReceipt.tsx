@@ -592,9 +592,9 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
                   <td className="font-bold font-nastaliq" style={{ padding: '8px' }}>{order.makingCharges || '-'}</td>
                   <td className="font-mono font-bold" style={{ padding: '8px' }}>{order.totalWt ? `${parseFloat(Number(order.totalWt).toFixed(2))}g` : '-'}</td>
                   <td className="font-mono font-bold" style={{ padding: '8px', color: '#dc2626' }}>
-                    {order.totalWt && order.oldWt && (parseFloat(order.totalWt) - parseFloat(order.oldWt) > 0) 
-                      ? `${Math.round(parseFloat(order.totalWt) - parseFloat(order.oldWt))}g` 
-                      : '-'}
+                    {order.oldWt && order.totalWt
+                      ? `${parseFloat((parseFloat(order.totalWt) - parseFloat(order.oldWt)).toFixed(2))}g` 
+                      : ''}
                   </td>
                 </tr>
               </tbody>

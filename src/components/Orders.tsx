@@ -708,8 +708,8 @@ export default function Orders({ lang }: OrdersProps) {
                 step="any"
                 readOnly
                 value={
-                  (parseFloat(formData.totalWt || '0') - parseFloat(formData.oldWt || '0')) > 0 
-                  ? Math.round(parseFloat(formData.totalWt || '0') - parseFloat(formData.oldWt || '0')).toString()
+                  formData.oldWt !== '' && formData.totalWt !== ''
+                  ? parseFloat((parseFloat(formData.totalWt) - parseFloat(formData.oldWt)).toFixed(2)).toString()
                   : ''
                 }
                 className="w-full p-3 bg-zinc-50 border border-sky-200 rounded-lg outline-none text-zinc-500 font-bold"
@@ -955,10 +955,14 @@ export default function Orders({ lang }: OrdersProps) {
                   <span className="font-bold text-xs">{order.totalWt}g</span>
                 </div>
               )}
-              {order.totalWt && order.oldWt && (parseFloat(order.totalWt) - parseFloat(order.oldWt) > 0) && (
+              {order.oldWt && (
                 <div className="flex justify-between text-red-800 bg-red-50 px-2 py-1 rounded-md border border-red-100">
                   <span className="urdu-text text-xs">{lang === 'ur' ? 'اضافی وزن:' : 'Izafi Wazan:'}</span>
-                  <span className="font-bold text-xs">{Math.round(parseFloat(order.totalWt) - parseFloat(order.oldWt))}g</span>
+                  <span className="font-bold text-xs">
+                    {order.totalWt 
+                      ? `${parseFloat((parseFloat(order.totalWt) - parseFloat(order.oldWt)).toFixed(2))}g` 
+                      : ''}
+                  </span>
                 </div>
               )}
               {order.img && (

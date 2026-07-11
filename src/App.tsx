@@ -38,6 +38,14 @@ import LockScreen from './components/LockScreen';
 import Expenses from './components/Expenses';
 
 import { APP_CONFIG } from './config';
+import { 
+  registerBackupHooks, 
+  googleSignIn, 
+  findBackupOnDrive, 
+  downloadBackupContent,
+  addAuthListener 
+} from './lib/googleDriveBackup';
+import { Cloud, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 
 type Section = 'billing' | 'purchases' | 'records' | 'orders' | 'karigar' | 'repairs' | 'stock' | 'customers' | 'expenses' | 'reports' | 'settings';
 
@@ -52,6 +60,12 @@ export default function App() {
   const [shopPhone, setShopPhone] = useState<string>(translations.ur.shopPhone);
   const [shopPhone2, setShopPhone2] = useState<string>(translations.ur.shopPhone2);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Google Drive Onboarding / Restore States
+  const [isOnboarding, setIsOnboarding] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState<'welcome' | 'checking' | 'found' | 'not_found' | 'success'>('welcome');
+  const [onboardingError, setOnboardingError] = useState<string>('');
+  const [foundBackup, setFoundBackup] = useState<{ id: string; modifiedTime: string; data?: any } | null>(null);
   
   // Security
   const [appPin, setAppPin] = useState<string | null>(null);
@@ -133,11 +147,95 @@ export default function App() {
           }
         }
       }
+
+      const initStatus = await db.settings.get('hasBeenInitialized');
+      const isDbEmpty = (await db.sales.count() === 0) && (await db.orders.count() === 0);
+
+      if (!initStatus && isDbEmpty) {
+        setIsOnboarding(true);
+      } else {
+        registerBackupHooks();
+      }
       
       setTimeout(() => setIsLoading(false), 1000);
     };
     fetchSettings();
   }, []);
+
+  const handleOnboardingFresh = async () => {
+    await db.settings.put({ key: 'hasBeenInitialized', value: 'true' });
+    setIsOnboarding(false);
+    registerBackupHooks();
+  };
+
+  const handleOnboardingConnect = async () => {
+    setOnboardingStep('checking');
+    setOnboardingError('');
+    try {
+      const res = await googleSignIn();
+      if (!res || !res.accessToken) {
+        throw new Error('No token returned');
+      }
+      const backup = await findBackupOnDrive(res.accessToken);
+      if (backup) {
+        const content = await downloadBackupContent(res.accessToken, backup.id);
+        if (content) {
+          setFoundBackup({
+            id: backup.id,
+            modifiedTime: backup.modifiedTime,
+            data: content
+          });
+          setOnboardingStep('found');
+        } else {
+          setOnboardingStep('not_found');
+        }
+      } else {
+        setOnboardingStep('not_found');
+      }
+    } catch (err: any) {
+      console.error(err);
+      setOnboardingError(lang === 'ur' ? 'رابطہ قائم کرنے میں خرابی پیش آئی۔ براہ کرم دوبارہ کوشش کریں۔' : 'Connection error. Please try again.');
+      setOnboardingStep('welcome');
+    }
+  };
+
+  const handleOnboardingRestore = async () => {
+    if (!foundBackup || !foundBackup.data) return;
+    setOnboardingStep('checking');
+    try {
+      const data = foundBackup.data;
+      
+      await db.sales.clear();
+      await db.orders.clear();
+      await db.karigars.clear();
+      await db.repairs.clear();
+      await db.stock.clear();
+      await db.settings.clear();
+      await db.goldPurchases.clear();
+      if (db.expenses) await db.expenses.clear();
+
+      if (data.sales) await db.sales.bulkAdd(data.sales);
+      if (data.orders) await db.orders.bulkAdd(data.orders);
+      if (data.karigars) await db.karigars.bulkAdd(data.karigars);
+      if (data.repairs) await db.repairs.bulkAdd(data.repairs);
+      if (data.stock) await db.stock.bulkAdd(data.stock);
+      if (data.settings) await db.settings.bulkAdd(data.settings);
+      if (data.goldPurchases) await db.goldPurchases.bulkAdd(data.goldPurchases);
+      if (data.expenses && db.expenses) await db.expenses.bulkAdd(data.expenses);
+
+      await db.settings.put({ key: 'hasBeenInitialized', value: 'true' });
+      await db.settings.put({ key: 'googleDriveConnected', value: 'true' });
+
+      setOnboardingStep('success');
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    } catch (err) {
+      console.error(err);
+      setOnboardingError(lang === 'ur' ? 'بیک اپ بحال کرنے میں خرابی۔' : 'Failed to restore backup.');
+      setOnboardingStep('welcome');
+    }
+  };
 
   // Handle native & web back-button navigation and exit behaviors
   useEffect(() => {
@@ -294,12 +392,16 @@ export default function App() {
               className={cn(
                 "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-300 group relative overflow-hidden",
                 activeSection === item.id 
-                  ? "bg-gold text-black shadow-lg shadow-gold/20 font-bold" 
-                  : "text-sky-100 hover:bg-sky-500 hover:text-gold"
+                  ? "text-black font-bold shadow-lg shadow-gold/20" 
+                  : "text-sky-100 hover:bg-sky-500/50 hover:text-gold"
               )}
             >
               {activeSection === item.id && (
-                <motion.div layoutId="nav-bg" className="absolute inset-0 bg-gold" />
+                <motion.div 
+                  layoutId="nav-bg" 
+                  className="absolute inset-0 bg-gold"
+                  transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                />
               )}
               <item.icon size={18} className={cn("relative z-10", activeSection === item.id ? "text-black" : "group-hover:scale-110 transition-transform")} />
               <span className="urdu-text text-sm relative z-10">{item.label}</span>
@@ -326,6 +428,11 @@ export default function App() {
             <Languages size={20} />
             <span className="text-sm">{lang === 'ur' ? 'English' : 'اردو'}</span>
           </button>
+          <div className="text-center pt-1">
+            <span className="text-[10px] text-sky-200/60 font-mono font-medium select-none">
+              v{APP_CONFIG.version}
+            </span>
+          </div>
         </div>
       </aside>
 
@@ -381,14 +488,21 @@ export default function App() {
                       setIsSidebarOpen(false);
                     }}
                     className={cn(
-                      "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all",
+                      "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all group relative overflow-hidden",
                       activeSection === item.id 
-                        ? "bg-gold text-black font-bold shadow-lg shadow-gold/20" 
-                        : "text-sky-100 hover:bg-sky-500 hover:text-gold"
+                        ? "text-black font-bold shadow-lg shadow-gold/20" 
+                        : "text-sky-100 hover:bg-sky-500/50 hover:text-gold"
                     )}
                   >
-                    <item.icon size={18} />
-                    <span className="urdu-text text-sm truncate">{item.label}</span>
+                    {activeSection === item.id && (
+                      <motion.div 
+                        layoutId="nav-bg-mobile" 
+                        className="absolute inset-0 bg-gold"
+                        transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                      />
+                    )}
+                    <item.icon size={18} className={cn("relative z-10", activeSection === item.id ? "text-black" : "")} />
+                    <span className="urdu-text text-sm truncate relative z-10">{item.label}</span>
                   </button>
                 ))}
               </nav>
@@ -418,6 +532,11 @@ export default function App() {
                   <Languages size={20} />
                   <span className="text-base">{lang === 'ur' ? 'English' : 'اردو'}</span>
                 </button>
+                <div className="text-center pt-1">
+                  <span className="text-[10px] text-sky-200/60 font-mono font-medium select-none">
+                    v{APP_CONFIG.version}
+                  </span>
+                </div>
               </div>
             </motion.aside>
           </>
@@ -430,10 +549,10 @@ export default function App() {
           <AnimatePresence mode="wait">
             <motion.div
               key={activeSection}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
+              initial={{ opacity: 0, y: 12, scale: 0.995 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -12, scale: 0.995 }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             >
               {renderSection()}
             </motion.div>
@@ -452,6 +571,168 @@ export default function App() {
           >
             <span className="text-gold">⚠️</span>
             <span className="urdu-text text-sm font-bold">{t.doubleBackExit}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Onboarding / Restore Dialog */}
+      <AnimatePresence>
+        {isOnboarding && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 z-[9999] flex items-center justify-center p-4 backdrop-blur-md"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              className="bg-zinc-900 border border-zinc-800 text-white rounded-3xl p-8 max-w-lg w-full shadow-2xl relative overflow-hidden"
+            >
+              <div className="absolute top-0 right-0 p-4">
+                <button 
+                  onClick={() => setLang(lang === 'ur' ? 'en' : 'ur')}
+                  className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-full text-xs font-bold transition-all"
+                >
+                  {lang === 'ur' ? 'English' : 'اردو'}
+                </button>
+              </div>
+
+              <div className="flex flex-col items-center text-center space-y-6">
+                <div className="p-4 bg-sky-500/10 text-sky-400 rounded-full border border-sky-500/20 animate-pulse">
+                  <Cloud size={40} />
+                </div>
+
+                {onboardingStep === 'welcome' && (
+                  <>
+                    <div className="space-y-2">
+                      <h2 className="text-2xl font-black text-white urdu-text">
+                        {lang === 'ur' ? 'نفیس جیولرز میں خوش آمدید!' : 'Welcome to Nafees Jewellers!'}
+                      </h2>
+                      <p className="text-zinc-400 text-sm leading-relaxed urdu-text">
+                        {lang === 'ur' 
+                          ? 'ایسا لگتا ہے کہ یہ ایک نئی انسٹالیشن ہے۔ کیا آپ اپنے پچھلے گوگل ڈرائیو بیک اپ سے سارا ڈیٹا واپس لانا چاہتے ہیں؟' 
+                          : 'It looks like this is a new installation. Would you like to check your Google Drive for a previous backup to restore?'}
+                      </p>
+                    </div>
+
+                    {onboardingError && (
+                      <p className="text-xs text-red-400 bg-red-400/10 border border-red-500/20 px-3 py-2 rounded-xl">
+                        {onboardingError}
+                      </p>
+                    )}
+
+                    <div className="flex flex-col w-full gap-3">
+                      <button
+                        onClick={handleOnboardingConnect}
+                        className="w-full flex items-center justify-center gap-3 py-3 bg-white hover:bg-zinc-100 text-zinc-900 font-bold rounded-2xl transition-all shadow-lg"
+                      >
+                        <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" style={{ display: 'block', width: '20px', height: '20px' }}>
+                          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
+                          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
+                          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
+                          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
+                        </svg>
+                        <span className="urdu-text">{lang === 'ur' ? 'ڈرائیو سے بحال کریں' : 'Restore from Google Drive'}</span>
+                      </button>
+
+                      <button
+                        onClick={handleOnboardingFresh}
+                        className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-2xl transition-all"
+                      >
+                        <span className="urdu-text">{lang === 'ur' ? 'نیا کام شروع کریں' : 'Start Fresh'}</span>
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {onboardingStep === 'checking' && (
+                  <div className="flex flex-col items-center space-y-4 py-8">
+                    <RefreshCw className="text-sky-500 animate-spin" size={40} />
+                    <p className="text-zinc-300 font-bold urdu-text">
+                      {lang === 'ur' ? 'گوگل ڈرائیو چیک ہو رہا ہے...' : 'Checking Google Drive for backups...'}
+                    </p>
+                  </div>
+                )}
+
+                {onboardingStep === 'found' && foundBackup && (
+                  <>
+                    <div className="space-y-2">
+                      <div className="p-3 bg-emerald-500/10 text-emerald-400 rounded-full border border-emerald-500/20 inline-block mb-2">
+                        <CheckCircle2 size={32} />
+                      </div>
+                      <h2 className="text-xl font-bold text-white urdu-text">
+                        {lang === 'ur' ? 'پچھلا بیک اپ مل گیا!' : 'Previous Backup Found!'}
+                      </h2>
+                      <div className="p-4 bg-zinc-800/50 rounded-2xl text-xs text-zinc-300 space-y-1.5 text-left border border-zinc-800 font-mono">
+                        <div>
+                          <span className="text-zinc-500">Last Modified:</span>{' '}
+                          {new Date(foundBackup.modifiedTime).toLocaleString(lang === 'ur' ? 'ur-PK' : 'en-US')}
+                        </div>
+                        <div>
+                          <span className="text-zinc-500">File ID:</span>{' '}
+                          <span className="text-sky-400">{foundBackup.id.slice(0, 12)}...</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col w-full gap-3">
+                      <button
+                        onClick={handleOnboardingRestore}
+                        className="w-full py-3 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-2xl transition-all"
+                      >
+                        <span className="urdu-text">{lang === 'ur' ? 'ابھی بحال کریں' : 'Restore Now'}</span>
+                      </button>
+
+                      <button
+                        onClick={handleOnboardingFresh}
+                        className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-bold rounded-2xl transition-all"
+                      >
+                        <span className="urdu-text">{lang === 'ur' ? 'رد کریں اور نیا شروع کریں' : 'Skip and Start Fresh'}</span>
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {onboardingStep === 'not_found' && (
+                  <>
+                    <div className="space-y-2">
+                      <div className="p-3 bg-zinc-800 text-zinc-400 rounded-full inline-block mb-2">
+                        <AlertCircle size={32} />
+                      </div>
+                      <h2 className="text-xl font-bold text-white urdu-text">
+                        {lang === 'ur' ? 'کوئی بیک اپ نہیں ملا' : 'No Backup Found'}
+                      </h2>
+                      <p className="text-zinc-400 text-sm urdu-text">
+                        {lang === 'ur' 
+                          ? 'آپ کے گوگل ڈرائیو پر نفیس جیولرز کا کوئی بیک اپ ریکارڈ نہیں ملا۔ آپ نیا کام شروع کر سکتے ہیں۔' 
+                          : 'No Nafees Jewellers backup was found on your Google Drive. You can start fresh and auto-backups will be enabled.'}
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={handleOnboardingFresh}
+                      className="w-full py-3 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-2xl transition-all"
+                    >
+                      <span className="urdu-text">{lang === 'ur' ? 'نیا کام شروع کریں' : 'Start Fresh'}</span>
+                    </button>
+                  </>
+                )}
+
+                {onboardingStep === 'success' && (
+                  <div className="flex flex-col items-center space-y-4 py-8">
+                    <CheckCircle2 className="text-emerald-500" size={48} />
+                    <p className="text-zinc-300 font-black text-lg urdu-text">
+                      {lang === 'ur' ? 'ڈیٹا کامیابی سے بحال ہو گیا!' : 'Data Restored Successfully!'}
+                    </p>
+                    <p className="text-xs text-zinc-500">
+                      {lang === 'ur' ? 'ایپ خود بخود دوبارہ شروع ہو رہی ہے...' : 'Reloading application...'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

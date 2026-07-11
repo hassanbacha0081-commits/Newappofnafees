@@ -1,6 +1,7 @@
 export const APP_CONFIG = {
   // Software Name
   softwareName: "Nafees Jewellers ERP",
+  version: "1.5.0",
   
   // Shop Details (Urdu)
   shopNameUrdu: "نفیس جیولرز",
@@ -18,7 +19,7 @@ export const APP_CONFIG = {
   androidPackageName: "com.nafeesjewellers.app",
 
   // Assets
-  appIcon: "https://images.unsplash.com/photo-1599643477877-530eb83abc8e?q=80&w=512&h=512&auto=format&fit=crop",
+  appIcon: "/src/assets/images/nafees_app_icon_1783754016375.jpg",
   splashBg: "https://images.unsplash.com/photo-1599643477877-530eb83abc8e?q=80&w=1920&auto=format&fit=crop",
   
   // Branding Colors

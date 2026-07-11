@@ -1,12 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../db';
 import { translations, type Language } from '../translations';
-import { Save, Download, Upload, Languages, Trash2, AlertTriangle, BadgeDollarSign, History, ShoppingBag } from 'lucide-react';
+import { APP_CONFIG } from '../config';
+import { Save, Download, Upload, Languages, Trash2, AlertTriangle, BadgeDollarSign, History, ShoppingBag, Cloud, CloudOff, RefreshCw } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { SecurityModal } from './SecurityModal';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
+import { 
+  addAuthListener, 
+  googleSignIn, 
+  logoutGoogleDrive, 
+  autoBackupToDrive, 
+  findBackupOnDrive, 
+  downloadBackupContent 
+} from '../lib/googleDriveBackup';
 
 interface SettingsProps {
   lang: Language;
@@ -26,6 +35,138 @@ export default function Settings({ lang, setGoldRate, setLang }: SettingsProps) 
   const [pinInput, setPinInput] = useState<string>('');
   const [showConfirmClear, setShowConfirmClear] = useState(false);
   const [securityAction, setSecurityAction] = useState<{ nameUr: string, nameEn: string, onVerify: () => void } | null>(null);
+
+  // Google Drive states
+  const [gUser, setGUser] = useState<any>(null);
+  const [gToken, setGToken] = useState<string | null>(null);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [lastDriveBackup, setLastDriveBackup] = useState<string | null>(null);
+  const [driveStatusMessage, setDriveStatusMessage] = useState<string>('');
+
+  useEffect(() => {
+    const unsubscribe = addAuthListener(async (user, token) => {
+      setGUser(user);
+      setGToken(token);
+      
+      const lastDate = await db.settings.get('lastDriveBackupDate');
+      if (lastDate) {
+        setLastDriveBackup(lastDate.value);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleGoogleConnect = async () => {
+    setIsGoogleLoading(true);
+    setDriveStatusMessage('');
+    try {
+      const res = await googleSignIn();
+      if (res) {
+        setDriveStatusMessage(lang === 'ur' ? 'گوگل ڈرائیو کامیابی سے مربوط ہو گئی!' : 'Google Drive connected successfully!');
+        // Trigger an immediate backup to keep Drive in sync
+        await autoBackupToDrive();
+        const lastDate = await db.settings.get('lastDriveBackupDate');
+        if (lastDate) setLastDriveBackup(lastDate.value);
+      }
+    } catch (err) {
+      console.error(err);
+      setDriveStatusMessage(lang === 'ur' ? 'گوگل لاگ ان ناکام رہا۔' : 'Google connection failed.');
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
+
+  const handleGoogleDisconnect = async () => {
+    if (window.confirm(lang === 'ur' ? 'کیا آپ واقعی گوگل ڈرائیو کو منقطع کرنا چاہتے ہیں؟' : 'Are you sure you want to disconnect Google Drive?')) {
+      await logoutGoogleDrive();
+      setDriveStatusMessage(lang === 'ur' ? 'گوگل ڈرائیو منقطع ہو گئی۔' : 'Google Drive disconnected.');
+      setLastDriveBackup(null);
+    }
+  };
+
+  const handleManualDriveBackup = async () => {
+    setIsGoogleLoading(true);
+    setDriveStatusMessage(lang === 'ur' ? 'بیک اپ اپ لوڈ ہو رہا ہے...' : 'Uploading backup...');
+    try {
+      const success = await autoBackupToDrive();
+      if (success) {
+        setDriveStatusMessage(lang === 'ur' ? 'بیک اپ کامیابی سے اپ لوڈ ہو گیا!' : 'Backup uploaded successfully!');
+        const lastDate = await db.settings.get('lastDriveBackupDate');
+        if (lastDate) setLastDriveBackup(lastDate.value);
+      } else {
+        setDriveStatusMessage(lang === 'ur' ? 'بیک اپ اپ لوڈ کرنے میں ناکامی۔' : 'Failed to upload backup.');
+      }
+    } catch (err) {
+      console.error(err);
+      setDriveStatusMessage(lang === 'ur' ? 'بیک اپ اپ لوڈ کرنے میں خرابی۔' : 'Error uploading backup.');
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
+
+  const handleManualDriveRestore = async () => {
+    if (!gToken) return;
+    const confirmRestore = window.confirm(
+      lang === 'ur' 
+        ? 'انتباہ: یہ عمل آپ کے موجودہ تمام ڈیٹا کو ختم کر کے گوگل ڈرائیو کے بیک اپ سے بحال کر دے گا۔ کیا آپ آگے بڑھنا چاہتے ہیں؟' 
+        : 'Warning: This will clear ALL current data and restore from the Google Drive backup. Do you want to proceed?'
+    );
+    if (!confirmRestore) return;
+
+    triggerSecurityCheck(
+      'گوگل ڈرائیو سے ڈیٹا بحال کریں',
+      'Restore Data from Google Drive',
+      async () => {
+        setIsGoogleLoading(true);
+        setDriveStatusMessage(lang === 'ur' ? 'بیک اپ تلاش کیا جا رہا ہے...' : 'Searching for backup...');
+        try {
+          const backupFile = await findBackupOnDrive(gToken);
+          if (!backupFile) {
+            alert(lang === 'ur' ? 'ڈرائیو پر کوئی بیک اپ فائل نہیں ملی!' : 'No backup file found on Drive!');
+            setDriveStatusMessage(lang === 'ur' ? 'کوئی بیک اپ نہیں ملا۔' : 'No backup found.');
+            return;
+          }
+
+          setDriveStatusMessage(lang === 'ur' ? 'ڈیٹا ڈاؤن لوڈ ہو رہا ہے...' : 'Downloading backup data...');
+          const data = await downloadBackupContent(gToken, backupFile.id);
+          if (!data) {
+            alert(lang === 'ur' ? 'بیک اپ ڈاؤن لوڈ کرنے میں ناکامی!' : 'Failed to download backup!');
+            return;
+          }
+
+          // Clear database and bulkAdd
+          await db.sales.clear();
+          await db.orders.clear();
+          await db.karigars.clear();
+          await db.repairs.clear();
+          await db.stock.clear();
+          await db.settings.clear();
+          await db.goldPurchases.clear();
+          if (db.expenses) await db.expenses.clear();
+
+          if (data.sales) await db.sales.bulkAdd(data.sales);
+          if (data.orders) await db.orders.bulkAdd(data.orders);
+          if (data.karigars) await db.karigars.bulkAdd(data.karigars);
+          if (data.repairs) await db.repairs.bulkAdd(data.repairs);
+          if (data.stock) await db.stock.bulkAdd(data.stock);
+          if (data.settings) await db.settings.bulkAdd(data.settings);
+          if (data.goldPurchases) await db.goldPurchases.bulkAdd(data.goldPurchases);
+          if (data.expenses && db.expenses) await db.expenses.bulkAdd(data.expenses);
+
+          // Re-set drive connected flag so it stays connected
+          await db.settings.put({ key: 'googleDriveConnected', value: 'true' });
+
+          alert(lang === 'ur' ? 'ڈیٹا گوگل ڈرائیو سے کامیابی سے بحال ہو گیا ہے!' : 'Data restored successfully from Google Drive!');
+          window.location.reload();
+        } catch (err) {
+          console.error(err);
+          alert(lang === 'ur' ? 'ڈیٹا بحال کرنے میں خرابی پیش آئی!' : 'Error restoring data!');
+        } finally {
+          setIsGoogleLoading(false);
+        }
+      }
+    );
+  };
 
   const triggerSecurityCheck = (nameUr: string, nameEn: string, onVerify: () => void) => {
     if (currentSettings.appPin) {
@@ -531,6 +672,102 @@ export default function Settings({ lang, setGoldRate, setLang }: SettingsProps) 
               {lang === 'ur' ? 'بیک اپ اور ڈیٹا مینجمنٹ' : 'Backup & Data Management'}
             </h3>
 
+            {/* Google Drive Automated Backup Section */}
+            <div className="p-6 bg-sky-50 rounded-2xl border border-sky-200/60 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Cloud className="text-sky-600 animate-pulse" size={24} />
+                  <div>
+                    <h4 className="font-bold text-sky-900 urdu-text">
+                      {lang === 'ur' ? 'گوگل ڈرائیو آٹو بیک اپ' : 'Google Drive Auto-Backup'}
+                    </h4>
+                    <p className="text-[11px] text-sky-600 urdu-text">
+                      {lang === 'ur' ? 'ڈیٹا محفوظ اور خودکار طریقے سے گوگل ڈرائیو پر اپ لوڈ ہوتا رہے گا' : 'Secure background sync to Google Drive'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-sky-200/50 text-sky-700">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                  {gUser ? 'Active' : 'Offline'}
+                </div>
+              </div>
+
+              {gUser ? (
+                <div className="space-y-3">
+                  <div className="p-3 bg-white rounded-xl border border-sky-100 text-xs text-zinc-600 space-y-1">
+                    <div className="flex justify-between">
+                      <span className="font-semibold">{lang === 'ur' ? 'مربوط اکاؤنٹ:' : 'Connected Account:'}</span>
+                      <span className="font-mono text-sky-700 font-medium">{gUser.email}</span>
+                    </div>
+                    {lastDriveBackup && (
+                      <div className="flex justify-between">
+                        <span className="font-semibold">{lang === 'ur' ? 'آخری خودکار بیک اپ:' : 'Last Backup Time:'}</span>
+                        <span className="font-mono text-zinc-500">{new Date(lastDriveBackup).toLocaleString(lang === 'ur' ? 'ur-PK' : 'en-US')}</span>
+                      </div>
+                    )}
+                    {driveStatusMessage && (
+                      <p className="text-[11px] text-amber-700 mt-2 font-medium bg-amber-50 px-2.5 py-1.5 rounded border border-amber-100/50">{driveStatusMessage}</p>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={handleManualDriveBackup}
+                      disabled={isGoogleLoading}
+                      className="flex items-center justify-center gap-1.5 py-2 px-3 bg-sky-600 text-white text-xs font-bold rounded-lg hover:bg-sky-700 transition-colors disabled:opacity-50"
+                    >
+                      <RefreshCw size={14} className={isGoogleLoading ? 'animate-spin' : ''} />
+                      <span className="urdu-text">{lang === 'ur' ? 'ابھی بیک اپ کریں' : 'Backup Now'}</span>
+                    </button>
+
+                    <button
+                      onClick={handleManualDriveRestore}
+                      disabled={isGoogleLoading}
+                      className="flex items-center justify-center gap-1.5 py-2 px-3 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      <Cloud className="text-white" size={14} />
+                      <span className="urdu-text">{lang === 'ur' ? 'بیک اپ سے بحال کریں' : 'Restore from Drive'}</span>
+                    </button>
+                  </div>
+
+                  <button
+                    onClick={handleGoogleDisconnect}
+                    className="w-full text-center text-red-500 hover:text-red-700 text-[11px] font-bold underline"
+                  >
+                    {lang === 'ur' ? 'گوگل ڈرائیو منقطع کریں' : 'Disconnect Google Account'}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3 pt-1">
+                  <p className="text-xs text-zinc-500 leading-relaxed urdu-text">
+                    {lang === 'ur' 
+                      ? 'اپنے ریکارڈز، بل، اور گاہکوں کے ڈیٹا کو خود بخود اپنے محفوظ گوگل ڈرائیو پر اپ لوڈ کریں۔ ایپ انسٹال کرنے پر آپ سارا ڈیٹا ایک کلک میں واپس لا سکیں گے۔' 
+                      : 'Automatically back up your records, bills, and customer list securely to Google Drive. Keep your shop data safe and restore with a single click on reinstall.'}
+                  </p>
+
+                  <button
+                    onClick={handleGoogleConnect}
+                    disabled={isGoogleLoading}
+                    className="gsi-material-button w-full flex items-center justify-center gap-3 py-2.5 bg-white border border-zinc-300 rounded-lg hover:bg-zinc-50 transition-colors disabled:opacity-50 text-xs font-medium text-zinc-700 shadow-sm"
+                  >
+                    <div className="gsi-material-button-icon">
+                      <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" style={{ display: 'block', width: '20px', height: '20px' }}>
+                        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
+                        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
+                        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
+                        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
+                        <path fill="none" d="M0 0h48v48H0z"></path>
+                      </svg>
+                    </div>
+                    <span className="gsi-material-button-contents font-semibold">{lang === 'ur' ? 'گوگل اکاؤنٹ مربوط کریں' : 'Connect Google Account'}</span>
+                  </button>
+                  {driveStatusMessage && (
+                    <p className="text-[11px] text-red-600 text-center">{driveStatusMessage}</p>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div className="p-4 bg-sky-50 rounded-xl border border-sky-100 mt-4 mb-4">
               <div>
                 <p className="font-bold text-sky-900 urdu-text">{lang === 'ur' ? 'آٹو بیک اپ سیٹنگ' : 'Auto Backup Setting'}</p>
@@ -626,6 +863,15 @@ export default function Settings({ lang, setGoldRate, setLang }: SettingsProps) 
                 <Trash2 size={20} className="group-hover:animate-bounce" />
                 <span className="urdu-text">{lang === 'ur' ? 'تمام ڈیٹا حذف کریں' : 'Clear All Data Permanently'}</span>
               </button>
+            </div>
+
+            <div className="text-center pt-6 flex flex-col items-center justify-center gap-1">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-sky-50 text-sky-700 rounded-full text-xs font-mono font-bold border border-sky-100/80 select-none">
+                Version {APP_CONFIG.version}
+              </span>
+              <span className="text-[10px] text-zinc-400 select-none">
+                {lang === 'ur' ? 'نفیس جیولرز ای آر پی • تمام حقوق محفوظ ہیں' : 'Nafees Jewellers ERP • All Rights Reserved'}
+              </span>
             </div>
           </div>
         </div>
