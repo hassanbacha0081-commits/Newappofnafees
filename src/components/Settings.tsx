@@ -68,9 +68,22 @@ export default function Settings({ lang, setGoldRate, setLang }: SettingsProps) 
         const lastDate = await db.settings.get('lastDriveBackupDate');
         if (lastDate) setLastDriveBackup(lastDate.value);
       }
-    } catch (err) {
-      console.error(err);
-      setDriveStatusMessage(lang === 'ur' ? 'گوگل لاگ ان ناکام رہا۔' : 'Google connection failed.');
+    } catch (err: any) {
+      const isPopupClosed = err && (
+        err.code === 'auth/popup-closed-by-user' || 
+        err.code === 'auth/cancelled-popup-request' ||
+        err.message?.includes('popup-closed-by-user') ||
+        err.message?.includes('cancelled-popup-request')
+      );
+      if (isPopupClosed) {
+        console.warn('Google connection cancelled/blocked:', err);
+        setDriveStatusMessage(lang === 'ur' 
+          ? 'سائن ان منسوخ کر دیا گیا یا براؤزر نے پاپ اپ بلاک کر دیا۔ براہ کرم پاپ اپ کی اجازت دیں اور دوبارہ کوشش کریں۔' 
+          : 'Sign-in cancelled or blocked by browser. Please allow popups and try again.');
+      } else {
+        console.error('Google connection failed:', err);
+        setDriveStatusMessage(lang === 'ur' ? 'گوگل لاگ ان ناکام رہا۔' : 'Google connection failed.');
+      }
     } finally {
       setIsGoogleLoading(false);
     }

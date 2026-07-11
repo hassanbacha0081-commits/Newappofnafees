@@ -6,6 +6,8 @@ import {
   onAuthStateChanged, 
   type User 
 } from 'firebase/auth';
+import { Browser } from '@capacitor/browser';
+import { Capacitor } from '@capacitor/core';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { db } from '../db';
 
@@ -20,6 +22,7 @@ provider.addScope('https://www.googleapis.com/auth/drive.file');
 let isSigningIn = false;
 let cachedAccessToken: string | null = null;
 let onAuthChangedListeners: Array<(user: User | null, token: string | null) => void> = [];
+let nativeResolve: ((res: { user: User; accessToken: string } | null) => void) | null = null;
 
 // Track if Google Drive is enabled/connected in settings or state
 let isDriveConnected = false;
@@ -27,14 +30,13 @@ let isDriveConnected = false;
 // Initialize auth state listener
 onAuthStateChanged(auth, async (user: User | null) => {
   if (user) {
-    // Attempt to retrieve token from current session or redirect credential
-    // Note: in-memory token is populated on googleSignIn, but for page refreshes
-    // we might need the user to click login once, or we can prompt them.
-    // We cache it when available.
     isDriveConnected = !!cachedAccessToken;
   } else {
-    cachedAccessToken = null;
-    isDriveConnected = false;
+    // If not on native platform, clear cached token on Firebase logout
+    if (!Capacitor.isNativePlatform()) {
+      cachedAccessToken = null;
+      isDriveConnected = false;
+    }
   }
   
   onAuthChangedListeners.forEach(listener => listener(user, cachedAccessToken));
@@ -49,28 +51,99 @@ export const addAuthListener = (listener: (user: User | null, token: string | nu
   };
 };
 
+export const setCachedAccessToken = async (token: string): Promise<{ user: User; accessToken: string }> => {
+  cachedAccessToken = token;
+  isDriveConnected = true;
+  await db.settings.put({ key: 'googleDriveConnected', value: 'true' });
+  
+  let mockUser: User = { 
+    uid: 'native_google_user', 
+    displayName: 'Nafees ERP Drive Account',
+    email: 'connected@nafeesjewellers.com'
+  } as any;
+
+  try {
+    const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (response.ok) {
+      const googleUser = await response.json();
+      mockUser = {
+        uid: googleUser.id,
+        email: googleUser.email,
+        displayName: googleUser.name,
+        photoURL: googleUser.picture,
+      } as any;
+    }
+  } catch (err) {
+    console.error('Error fetching Google User profile info:', err);
+  }
+
+  onAuthChangedListeners.forEach(listener => listener(mockUser, token));
+  
+  if (nativeResolve) {
+    nativeResolve({ user: mockUser, accessToken: token });
+    nativeResolve = null;
+  }
+  isSigningIn = false;
+  return { user: mockUser, accessToken: token };
+};
+
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
   try {
     isSigningIn = true;
-    const result = await signInWithPopup(auth, provider);
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    if (!credential?.accessToken) {
-      throw new Error('Failed to get access token from Google Auth');
-    }
 
-    cachedAccessToken = credential.accessToken;
-    isDriveConnected = true;
-    
-    // Save to settings that Google Drive backup is enabled
-    await db.settings.put({ key: 'googleDriveConnected', value: 'true' });
-    
-    onAuthChangedListeners.forEach(listener => listener(result.user, cachedAccessToken));
-    return { user: result.user, accessToken: cachedAccessToken };
+    if (Capacitor.isNativePlatform()) {
+      const clientId = firebaseConfig.oAuthClientId;
+      const redirectUri = `https://${firebaseConfig.authDomain}`;
+      const scope = encodeURIComponent('https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email');
+      
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+        `client_id=${clientId}` +
+        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        `&response_type=token` +
+        `&scope=${scope}` +
+        `&state=native` +
+        `&prompt=consent`;
+        
+      await Browser.open({ url: authUrl });
+      
+      return new Promise((resolve) => {
+        nativeResolve = resolve;
+      });
+    } else {
+      const result = await signInWithPopup(auth, provider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      if (!credential?.accessToken) {
+        throw new Error('Failed to get access token from Google Auth');
+      }
+
+      cachedAccessToken = credential.accessToken;
+      isDriveConnected = true;
+      
+      // Save to settings that Google Drive backup is enabled
+      await db.settings.put({ key: 'googleDriveConnected', value: 'true' });
+      
+      onAuthChangedListeners.forEach(listener => listener(result.user, cachedAccessToken));
+      return { user: result.user, accessToken: cachedAccessToken };
+    }
   } catch (error: any) {
-    console.error('Google Sign-In error:', error);
+    const isPopupClosed = error && (
+      error.code === 'auth/popup-closed-by-user' || 
+      error.code === 'auth/cancelled-popup-request' ||
+      error.message?.includes('popup-closed-by-user') ||
+      error.message?.includes('cancelled-popup-request')
+    );
+    if (isPopupClosed) {
+      console.warn('Google Sign-In popup was closed or cancelled by the user/browser.');
+    } else {
+      console.error('Google Sign-In error:', error);
+    }
     throw error;
   } finally {
-    isSigningIn = false;
+    if (!Capacitor.isNativePlatform()) {
+      isSigningIn = false;
+    }
   }
 };
 
