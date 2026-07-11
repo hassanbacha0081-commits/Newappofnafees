@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { db, type Sale, type SalesItem } from '../db';
 import { translations, type Language } from '../translations';
 import { formatDate, compressImage } from '../lib/utils';
-import { Camera, RotateCcw, Trash2, Printer, Plus, X, ShoppingBag, Download, AlertCircle, CheckCircle2, Users } from 'lucide-react';
+import { Camera, RotateCcw, Trash2, Printer, Plus, X, ShoppingBag, Download, AlertCircle, CheckCircle2, Users, ImageIcon } from 'lucide-react';
 import { useReactToPrint } from 'react-to-print';
 import { AnimatePresence, motion } from 'motion/react';
 import html2canvas from 'html2canvas';
@@ -48,6 +48,8 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
   const [isPrinting, setIsPrinting] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
 
   const handlePrint = useReactToPrint({
     contentRef: printRef,
@@ -646,6 +648,7 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
               <div className="flex flex-col gap-3 sm:flex-row sm:gap-6">
                 <div className="flex-1 space-y-3">
                   <input
+                    ref={cameraInputRef}
                     type="file"
                     accept="image/*"
                     capture="environment"
@@ -653,28 +656,31 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
                     className="hidden"
                     id="item-camera"
                   />
-                  <label
-                    htmlFor="item-camera"
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
                     className="w-full flex items-center justify-center gap-3 px-6 py-4 rounded-xl border border-sky-200 text-sky-600 hover:border-gold hover:bg-gold/5 transition-all cursor-pointer bg-sky-50 font-bold urdu-text"
                   >
                     <Camera size={20} />
                     <span>{lang === 'ur' ? 'کیمرہ سے تصویر' : 'Camera'}</span>
-                  </label>
+                  </button>
                   
                   <input
+                    ref={galleryInputRef}
                     type="file"
                     accept="image/*"
                     onChange={handleFileChange}
                     className="hidden"
                     id="item-gallery"
                   />
-                  <label
-                    htmlFor="item-gallery"
+                  <button
+                    type="button"
+                    onClick={() => galleryInputRef.current?.click()}
                     className="w-full flex items-center justify-center gap-3 px-6 py-4 rounded-xl border border-sky-200 text-sky-600 hover:border-gold hover:bg-gold/5 transition-all cursor-pointer bg-sky-50 font-bold urdu-text"
                   >
-                    <Users size={20} />
+                    <ImageIcon size={20} />
                     <span>{lang === 'ur' ? 'گیلری سے تصویر' : 'Gallery'}</span>
-                  </label>
+                  </button>
                 </div>
 
                 {lastImg && (

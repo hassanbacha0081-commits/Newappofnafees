@@ -457,6 +457,45 @@ export default function Records({ lang, setActiveSection, setEditingSale }: Reco
                     </div>
                   </div>
 
+                  {/* Items List inside the Record Card */}
+                  {sale.items && sale.items.length > 0 && (
+                    <div className="border-t border-sky-100 pt-3 mt-1 space-y-2">
+                      <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider urdu-text">
+                        {lang === 'ur' ? 'اشیاء کی تفصیل:' : 'Items Details:'}
+                      </p>
+                      <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                        {sale.items.map((item, idx) => (
+                          <div key={idx} className="flex items-center justify-between p-2 bg-zinc-50 rounded-xl border border-zinc-100 text-xs">
+                            <div className="flex items-center gap-2 overflow-hidden">
+                              {item.img ? (
+                                <div 
+                                  onClick={() => setViewImage(item.img!)}
+                                  className="w-10 h-10 rounded-lg overflow-hidden border border-zinc-200 shadow-sm cursor-pointer flex-shrink-0"
+                                  title={lang === 'ur' ? 'تصویر دیکھیں' : 'View Image'}
+                                >
+                                  <img src={item.img} alt={item.n} className="w-full h-full object-cover" />
+                                </div>
+                              ) : (
+                                <div className="w-10 h-10 rounded-lg bg-zinc-100 border border-zinc-200 flex items-center justify-center flex-shrink-0 text-[10px] text-zinc-400 font-bold font-nastaliq">
+                                  -
+                                </div>
+                              )}
+                              <div className="truncate">
+                                <p className="font-bold text-zinc-800 truncate urdu-text">{item.n}</p>
+                                <p className="text-[10px] text-zinc-400 font-mono">
+                                  {item.w}g | {item.p || 1} Qty
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-right flex-shrink-0">
+                              <p className="font-bold text-gold-dark font-mono">Rs. {item.t.toLocaleString()}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex items-center gap-2 pt-2">
                     <button
                       onClick={() => {
