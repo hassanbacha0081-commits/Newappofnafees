@@ -1,6 +1,9 @@
 # Auto-detect text files and perform line-ending normalization
 * text=auto
 
+# Ensure shell scripts always use LF (Linux) line endings
+*gradlew text eol=lf
+
 # Declare binary files to completely prevent git formatting/corruption
 *.jar binary
 *.png binary
