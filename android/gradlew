@@ -249,4 +249,5 @@ eval "set -- $(
         tr '\n' ' '
     )" '"$@"'
 
+echo "DEBUG: Running command: $JAVACMD $@" >&2
 exec "$JAVACMD" "$@"

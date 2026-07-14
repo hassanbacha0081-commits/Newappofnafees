@@ -50,18 +50,13 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '8.10.2'
-          validate-wrappers: false
 
-      - name: Normalize Line Endings for Gradle Wrapper
+      - name: Regenerate Pristine Gradle Wrapper
         run: |
-          sed -i 's/\r$//' android/gradlew
-
-      - name: Download Pristine Gradle Wrapper JAR
-        run: |
-          curl -L -o android/gradle/wrapper/gradle-wrapper.jar https://github.com/gradle/gradle/raw/v8.10.2/gradle/wrapper/gradle-wrapper.jar
-
-      - name: Make Gradle Wrapper Executable
-        run: chmod +x android/gradlew
+          cd android
+          gradle wrapper --gradle-version 8.10.2
+          sed -i 's/\r$//' gradlew
+          chmod +x gradlew
 
       - name: Build APK with Gradle Wrapper
         run: |
