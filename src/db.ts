@@ -111,6 +111,12 @@ export interface Setting {
   value: any;
 }
 
+export interface PhoneContact {
+  id?: number;
+  name: string;
+  phone: string;
+}
+
 export class MyDatabase extends Dexie {
   sales!: Table<Sale>;
   orders!: Table<Order>;
@@ -120,6 +126,7 @@ export class MyDatabase extends Dexie {
   settings!: Table<Setting>;
   goldPurchases!: Table<GoldPurchase>;
   expenses!: Table<Expense>;
+  contacts!: Table<PhoneContact>;
 
   constructor() {
     super('NafeesERP_V56_Final');
@@ -132,6 +139,17 @@ export class MyDatabase extends Dexie {
       settings: 'key',
       goldPurchases: '++id, name, phone, date',
       expenses: '++id, category, date'
+    });
+    this.version(7).stores({
+      sales: '++id, name, phone, date',
+      orders: '++id, name, phone, status, due, karigar',
+      karigars: '++id, name, phone, date',
+      repairs: '++id, customerName, status, date',
+      stock: '++id, name, type, [name+type]',
+      settings: 'key',
+      goldPurchases: '++id, name, phone, date',
+      expenses: '++id, category, date',
+      contacts: '++id, name, phone'
     });
   }
 }

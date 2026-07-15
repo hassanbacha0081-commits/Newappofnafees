@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { db, type GoldPurchase } from '../db';
 import { translations, type Language } from '../translations';
-import { Save, Printer, Camera, RotateCcw } from 'lucide-react';
+import { Save, Printer, Camera, RotateCcw, Users } from 'lucide-react';
 import { useReactToPrint } from 'react-to-print';
 import { PrintReceipt } from './PrintReceipt';
 import html2canvas from 'html2canvas';
@@ -14,6 +14,7 @@ interface PurchasesProps {
 }
 
 import ImageLightbox from './ImageLightbox';
+import ContactPickerModal from './ContactPickerModal';
 
 export default function Purchases({ lang }: PurchasesProps) {
   const t = translations[lang];
@@ -21,6 +22,7 @@ export default function Purchases({ lang }: PurchasesProps) {
 
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [isContactPickerOpen, setIsContactPickerOpen] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [weight, setWeight] = useState<string>('');
@@ -246,14 +248,24 @@ export default function Purchases({ lang }: PurchasesProps) {
                 </div>
                 <div className="space-y-2">
                   <label className={`text-sm font-bold text-zinc-700 ml-1 ${isUrdu ? 'urdu-text' : ''}`}>{t.phoneNumber}</label>
-                  <input 
-                    type="text" 
-                    placeholder="03xx xxxxxxx"
-                    value={phone}
-                    onChange={e => setPhone(e.target.value)}
-                    dir="ltr"
-                    className="w-full bg-sky-50 border border-sky-100 rounded-2xl px-5 py-4 text-right focus:ring-2 focus:ring-gold outline-none transition-all hover:bg-white focus:bg-white text-lg font-mono font-bold"
-                  />
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      placeholder="03xx xxxxxxx"
+                      value={phone}
+                      onChange={e => setPhone(e.target.value)}
+                      dir="ltr"
+                      className="flex-1 bg-sky-50 border border-sky-100 rounded-2xl px-5 py-4 text-right focus:ring-2 focus:ring-gold outline-none transition-all hover:bg-white focus:bg-white text-lg font-mono font-bold"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setIsContactPickerOpen(true)}
+                      className="px-4 bg-gold/10 hover:bg-gold/25 text-gold-dark border border-gold/30 rounded-2xl flex items-center justify-center transition-all cursor-pointer"
+                      title={lang === 'ur' ? 'رابطہ منتخب کریں' : 'Browse Contacts'}
+                    >
+                      <Users size={22} />
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -427,6 +439,15 @@ export default function Purchases({ lang }: PurchasesProps) {
         />
       </div>
 
+      <ContactPickerModal
+        isOpen={isContactPickerOpen}
+        onClose={() => setIsContactPickerOpen(false)}
+        onSelect={(contact) => {
+          setName(contact.name || name);
+          setPhone(contact.phone || phone);
+        }}
+        lang={lang}
+      />
       {lightboxImage && (
         <ImageLightbox src={lightboxImage} onClose={() => setLightboxImage(null)} title={lang === 'ur' ? 'خریداری کی تصویر' : 'Purchase Image'} />
       )}

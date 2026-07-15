@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type KarigarRecord } from '../db';
 import { translations, type Language } from '../translations';
 import { formatCurrency, formatDate, formatWhatsAppUrl, compressImage } from '../lib/utils';
-import { Plus, Check, Trash2, Camera, RotateCcw, MessageCircle, Printer, Edit, Image as ImageIcon, AlertTriangle, X, Download, AlertCircle } from 'lucide-react';
+import { Plus, Check, Trash2, Camera, RotateCcw, MessageCircle, Printer, Edit, Image as ImageIcon, AlertTriangle, X, Download, AlertCircle, Users } from 'lucide-react';
 import { useReactToPrint } from 'react-to-print';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -22,12 +22,14 @@ interface KarigarProps {
 }
 
 import ImageLightbox from './ImageLightbox';
+import ContactPickerModal from './ContactPickerModal';
 
 export default function Karigar({ lang }: KarigarProps) {
   const t = translations[lang];
   const [editId, setEditId] = useState<number | null>(null);
   const [currentImg, setCurrentImg] = useState<string | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [isContactPickerOpen, setIsContactPickerOpen] = useState(false);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -357,13 +359,23 @@ export default function Karigar({ lang }: KarigarProps) {
             onChange={e => setFormData({ ...formData, name: e.target.value })}
             className="w-full p-4 bg-white border border-sky-200 rounded-xl outline-none focus:border-gold text-black text-center"
           />
-          <input 
-            type="number" 
-            placeholder={t.karigarLabels.mobile}
-            value={formData.phone}
-            onChange={e => setFormData({ ...formData, phone: e.target.value })}
-            className="w-full p-4 bg-white border border-sky-200 rounded-xl outline-none focus:border-gold text-black text-center"
-          />
+          <div className="flex gap-2">
+            <input 
+              type="text" 
+              placeholder={t.karigarLabels.mobile}
+              value={formData.phone}
+              onChange={e => setFormData({ ...formData, phone: e.target.value })}
+              className="flex-1 p-4 bg-white border border-sky-200 rounded-xl outline-none focus:border-gold text-black text-center font-mono font-bold"
+            />
+            <button
+              type="button"
+              onClick={() => setIsContactPickerOpen(true)}
+              className="px-4 bg-gold/10 hover:bg-gold/25 text-gold-dark border border-gold/30 rounded-xl flex items-center justify-center transition-all cursor-pointer"
+              title={lang === 'ur' ? 'رابطہ منتخب کریں' : 'Browse Contacts'}
+            >
+              <Users size={18} />
+            </button>
+          </div>
           <MultiSelectInput 
             options={t.itemDetailsList}
             placeholder={t.karigarLabels.taskDetail}
@@ -543,6 +555,18 @@ export default function Karigar({ lang }: KarigarProps) {
         ))}
       </div>
 
+      <ContactPickerModal
+        isOpen={isContactPickerOpen}
+        onClose={() => setIsContactPickerOpen(false)}
+        onSelect={(contact) => {
+          setFormData(prev => ({
+            ...prev,
+            name: contact.name || prev.name,
+            phone: contact.phone || prev.phone
+          }));
+        }}
+        lang={lang}
+      />
       {lightboxImage && (
         <ImageLightbox src={lightboxImage} onClose={() => setLightboxImage(null)} title={lang === 'ur' ? 'لیبارٹری رپورٹ' : 'Lab Report'} />
       )}

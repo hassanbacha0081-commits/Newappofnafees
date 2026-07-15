@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Order } from '../db';
 import { translations, type Language } from '../translations';
 import { formatCurrency, formatDate, formatWhatsAppUrl, compressImage } from '../lib/utils';
-import { Plus, Check, Trash2, Camera, RotateCcw, MessageCircle, Printer, X, Download, AlertCircle, ImageIcon } from 'lucide-react';
+import { Plus, Check, Trash2, Camera, RotateCcw, MessageCircle, Printer, X, Download, AlertCircle, ImageIcon, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useReactToPrint } from 'react-to-print';
 import html2canvas from 'html2canvas';
@@ -23,12 +23,14 @@ interface OrdersProps {
 }
 
 import ImageLightbox from './ImageLightbox';
+import ContactPickerModal from './ContactPickerModal';
 
 export default function Orders({ lang }: OrdersProps) {
   const t = translations[lang];
   const [isAdding, setIsAdding] = useState(false);
   const [currentImg, setCurrentImg] = useState<string | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [isContactPickerOpen, setIsContactPickerOpen] = useState(false);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -577,12 +579,22 @@ export default function Orders({ lang }: OrdersProps) {
             </div>
             <div className="space-y-1">
               <label className="text-xs text-zinc-500 urdu-text">فون نمبر:</label>
-              <input 
-                type="number" 
-                value={formData.phone}
-                onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                className="w-full p-3 bg-white border border-sky-200 rounded-lg outline-none focus:border-gold text-black"
-              />
+              <div className="flex gap-2">
+                <input 
+                  type="text" 
+                  value={formData.phone}
+                  onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                  className="flex-1 p-3 bg-white border border-sky-200 rounded-lg outline-none focus:border-gold text-black font-mono font-bold"
+                />
+                <button
+                  type="button"
+                  onClick={() => setIsContactPickerOpen(true)}
+                  className="px-3 bg-gold/10 hover:bg-gold/25 text-gold-dark border border-gold/30 rounded-lg flex items-center justify-center transition-all cursor-pointer"
+                  title={lang === 'ur' ? 'رابطہ منتخب کریں' : 'Browse Contacts'}
+                >
+                  <Users size={18} />
+                </button>
+              </div>
             </div>
             <div className="space-y-1">
               <label className="text-xs text-zinc-500 urdu-text">تاریخ بکنگ:</label>
@@ -1052,6 +1064,18 @@ export default function Orders({ lang }: OrdersProps) {
         ))}
       </div>
 
+      <ContactPickerModal
+        isOpen={isContactPickerOpen}
+        onClose={() => setIsContactPickerOpen(false)}
+        onSelect={(contact) => {
+          setFormData(prev => ({
+            ...prev,
+            name: contact.name || prev.name,
+            phone: contact.phone || prev.phone
+          }));
+        }}
+        lang={lang}
+      />
       {lightboxImage && (
         <ImageLightbox src={lightboxImage} onClose={() => setLightboxImage(null)} title={lang === 'ur' ? 'آرڈر تصویر' : 'Order Image'} />
       )}

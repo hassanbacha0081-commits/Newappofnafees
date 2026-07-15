@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Repair } from '../db';
 import { translations, type Language } from '../translations';
 import { formatCurrency, formatDate, formatWhatsAppUrl, compressImage } from '../lib/utils';
-import { Plus, Check, Trash2, Clock, MessageCircle, Printer, Camera, RotateCcw, X, AlertTriangle, Download, AlertCircle, Search } from 'lucide-react';
+import { Plus, Check, Trash2, Clock, MessageCircle, Printer, Camera, RotateCcw, X, AlertTriangle, Download, AlertCircle, Search, Users } from 'lucide-react';
 import { useReactToPrint } from 'react-to-print';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -22,12 +22,14 @@ interface RepairsProps {
 }
 
 import ImageLightbox from './ImageLightbox';
+import ContactPickerModal from './ContactPickerModal';
 
 export default function Repairs({ lang }: RepairsProps) {
   const t = translations[lang];
   const [isAdding, setIsAdding] = useState(false);
   const [currentImg, setCurrentImg] = useState<string | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [isContactPickerOpen, setIsContactPickerOpen] = useState(false);
   const [formData, setFormData] = useState<Partial<Repair>>({
     customerName: '',
     customerPhone: '',
@@ -356,12 +358,22 @@ export default function Repairs({ lang }: RepairsProps) {
             </div>
             <div>
               <label className="block text-sm font-medium text-zinc-500 mb-1 urdu-text">{t.phoneNumber}</label>
-              <input 
-                type="text" 
-                value={formData.customerPhone}
-                onChange={e => setFormData({...formData, customerPhone: e.target.value})}
-                className="w-full bg-white border border-sky-200 rounded-lg p-3 focus:border-gold outline-none text-black"
-              />
+              <div className="flex gap-2">
+                <input 
+                  type="text" 
+                  value={formData.customerPhone}
+                  onChange={e => setFormData({...formData, customerPhone: e.target.value})}
+                  className="flex-1 bg-white border border-sky-200 rounded-lg p-3 focus:border-gold outline-none text-black"
+                />
+                <button
+                  type="button"
+                  onClick={() => setIsContactPickerOpen(true)}
+                  className="px-3 bg-gold/10 hover:bg-gold/25 text-gold-dark border border-gold/30 rounded-lg flex items-center justify-center transition-all cursor-pointer"
+                  title={lang === 'ur' ? 'رابطہ منتخب کریں' : 'Browse Contacts'}
+                >
+                  <Users size={18} />
+                </button>
+              </div>
             </div>
           </div>
           <div className="space-y-4">
@@ -529,6 +541,18 @@ export default function Repairs({ lang }: RepairsProps) {
         ))}
       </div>
 
+      <ContactPickerModal
+        isOpen={isContactPickerOpen}
+        onClose={() => setIsContactPickerOpen(false)}
+        onSelect={(contact) => {
+          setFormData(prev => ({
+            ...prev,
+            customerName: contact.name || prev.customerName,
+            customerPhone: contact.phone || prev.customerPhone
+          }));
+        }}
+        lang={lang}
+      />
       {lightboxImage && (
         <ImageLightbox src={lightboxImage} onClose={() => setLightboxImage(null)} title={lang === 'ur' ? 'مرمت کی تصویر' : 'Repair Image'} />
       )}

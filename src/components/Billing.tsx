@@ -20,12 +20,14 @@ interface BillingProps {
 }
 
 import ImageLightbox from './ImageLightbox';
+import ContactPickerModal from './ContactPickerModal';
 
 export default function Billing({ lang, editingSale, setEditingSale }: BillingProps) {
   const t = translations[lang];
   const [billItems, setBillItems] = useState<SalesItem[]>([]);
   const [lastImg, setLastImg] = useState<string | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [isContactPickerOpen, setIsContactPickerOpen] = useState(false);
   
   const [formData, setFormData] = useState({
     cName: '',
@@ -530,14 +532,24 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-bold text-zinc-700 ml-1 urdu-text">{t.phoneNumber}</label>
-                <input
-                  type="text"
-                  placeholder="03xx xxxxxxx"
-                  value={formData.cPhone}
-                  onChange={e => setFormData({ ...formData, cPhone: e.target.value })}
-                  className="w-full px-5 py-4 bg-sky-50 border border-sky-100 rounded-2xl focus:ring-2 focus:ring-gold focus:bg-white outline-none transition-all text-lg font-mono font-bold text-right"
-                  dir="ltr"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="03xx xxxxxxx"
+                    value={formData.cPhone}
+                    onChange={e => setFormData({ ...formData, cPhone: e.target.value })}
+                    className="flex-1 px-5 py-4 bg-sky-50 border border-sky-100 rounded-2xl focus:ring-2 focus:ring-gold focus:bg-white outline-none transition-all text-lg font-mono font-bold text-right"
+                    dir="ltr"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setIsContactPickerOpen(true)}
+                    className="px-4 bg-gold/10 hover:bg-gold/25 text-gold-dark border border-gold/30 rounded-2xl flex items-center justify-center transition-all cursor-pointer"
+                    title={lang === 'ur' ? 'رابطہ منتخب کریں' : 'Browse Contacts'}
+                  >
+                    <Users size={22} />
+                  </button>
+                </div>
               </div>
             </div>
             
@@ -849,6 +861,18 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
           </div>
         </div>
       </div>
+      <ContactPickerModal
+        isOpen={isContactPickerOpen}
+        onClose={() => setIsContactPickerOpen(false)}
+        onSelect={(contact) => {
+          setFormData(prev => ({
+            ...prev,
+            cName: contact.name || prev.cName,
+            cPhone: contact.phone || prev.cPhone
+          }));
+        }}
+        lang={lang}
+      />
       {lightboxImage && (
         <ImageLightbox src={lightboxImage} onClose={() => setLightboxImage(null)} title={lang === 'ur' ? 'بل آئٹم تصویر' : 'Invoice Item Image'} />
       )}
