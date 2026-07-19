@@ -102,66 +102,64 @@ export default function Khaata({ lang }: KhaataProps) {
       window.scrollTo(0, 0);
       
       const element = printRef.current;
-      const elementHeight = element.scrollHeight || element.offsetHeight || 1130;
+      const pageElements = element.querySelectorAll('.print-page');
       
-      const canvas = await html2canvas(element, {
-        scale: 2.5, // High quality, balanced for memory
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        allowTaint: false,
-        imageTimeout: 3000,
-        windowWidth: 800,
-        windowHeight: elementHeight,
-        height: elementHeight,
-        onclone: (clonedDoc) => {
-          clonedDoc.body.style.margin = '0';
-          clonedDoc.body.style.padding = '0';
-          clonedDoc.body.style.backgroundColor = '#ffffff';
-          clonedDoc.body.style.width = '800px';
-          clonedDoc.body.style.height = `${elementHeight}px`;
-          clonedDoc.body.style.overflow = 'visible';
-          
-          // Force container to lay out fully and visible
-          const clonedContainer = clonedDoc.querySelector('[data-print-container]');
-          if (clonedContainer) {
-            (clonedContainer as HTMLElement).style.position = 'relative';
-            (clonedContainer as HTMLElement).style.left = '0';
-            (clonedContainer as HTMLElement).style.opacity = '1';
-            (clonedContainer as HTMLElement).style.width = '800px';
-            (clonedContainer as HTMLElement).style.height = 'auto';
-            (clonedContainer as HTMLElement).style.overflow = 'visible';
-            (clonedContainer as HTMLElement).style.display = 'block';
-          }
-        }
-      });
-      const imgData = canvas.toDataURL('image/jpeg', 0.85);
-
-      const canvasWidth = canvas.width;
-      const canvasHeight = canvas.height;
-      const pdfWidth = 21.0; // A4 width in cm
-      const pdfPageHeight = 29.7; // A4 height in cm
-      const totalPdfHeight = (canvasHeight / canvasWidth) * pdfWidth;
-
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'cm',
         format: 'a4'
       });
-
-      let heightLeft = totalPdfHeight;
-      let position = 0;
-
-      // Add first page
-      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, totalPdfHeight);
-      heightLeft -= pdfPageHeight;
-
-      // Loop to add more pages if the table is long and spans multiple A4 pages
-      while (heightLeft > 0) {
-        position -= pdfPageHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, totalPdfHeight);
-        heightLeft -= pdfPageHeight;
+      
+      const pdfWidth = 21.0; // A4 width in cm
+      const pdfPageHeight = 29.7; // A4 height in cm
+      
+      if (pageElements.length > 0) {
+        for (let i = 0; i < pageElements.length; i++) {
+          const pageEl = pageElements[i] as HTMLElement;
+          
+          const canvas = await html2canvas(pageEl, {
+            scale: 2.2, // Balanced for memory and quality
+            useCORS: true,
+            logging: false,
+            backgroundColor: '#ffffff',
+            allowTaint: false,
+            imageTimeout: 3000,
+            windowWidth: 800,
+            windowHeight: 1130,
+            height: 1130,
+            onclone: (clonedDoc) => {
+              clonedDoc.body.style.margin = '0';
+              clonedDoc.body.style.padding = '0';
+              clonedDoc.body.style.backgroundColor = '#ffffff';
+              clonedDoc.body.style.width = '800px';
+              clonedDoc.body.style.height = '1130px';
+              clonedDoc.body.style.overflow = 'hidden';
+            }
+          });
+          
+          const imgData = canvas.toDataURL('image/jpeg', 0.85);
+          
+          if (i > 0) {
+            pdf.addPage();
+          }
+          
+          pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfPageHeight);
+        }
+      } else {
+        // Fallback to single page capture if no print-page items found
+        const canvas = await html2canvas(element, {
+          scale: 2.2,
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff',
+          allowTaint: false,
+          imageTimeout: 3000,
+          windowWidth: 800,
+          windowHeight: 1130,
+          height: 1130
+        });
+        const imgData = canvas.toDataURL('image/jpeg', 0.85);
+        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfPageHeight);
       }
 
       return pdf.output('datauristring');
@@ -1041,7 +1039,7 @@ export default function Khaata({ lang }: KhaataProps) {
           OFF-SCREEN CAPTURE AREA FOR PDF/PRINT
           ========================================== */}
       <div data-print-container className="absolute -left-[9999px] top-0 opacity-0 pointer-events-none">
-        <div ref={printRef} dir="rtl" className="p-8 bg-white text-zinc-900 w-[800px] min-h-[1130px] border-[6px] double border-gold rounded-lg relative" style={{ fontFamily: 'Inter, sans-serif' }}>
+        <div ref={printRef} className="print-pages-container">
           <style dangerouslySetInnerHTML={{ __html: `
             @media print {
               @page {
@@ -1053,128 +1051,69 @@ export default function Khaata({ lang }: KhaataProps) {
                 padding: 0 !important;
                 background: white !important;
               }
-              tr {
+              .print-pages-container {
+                width: 100% !important;
+                height: auto !important;
+              }
+              .print-page {
+                page-break-after: always !important;
                 page-break-inside: avoid !important;
+                margin: 0 !important;
+                border: none !important;
+                border-radius: 0 !important;
+                box-shadow: none !important;
+                width: 210mm !important;
+                height: 297mm !important;
+                box-sizing: border-box !important;
               }
             }
           ` }} />
-          <div className="absolute inset-4 border border-dashed border-gold rounded pointer-events-none"></div>
-          
-          {/* Print Title */}
-          <div className="text-center border-b-2 border-gold pb-4 mb-6">
-            <h1 className="text-4xl font-black urdu-text text-gold-dark mb-1">{translations.ur.shopName}</h1>
-            <p className="text-sm font-bold text-zinc-500 font-nastaliq">{translations.ur.shopAddress}</p>
-            <p className="text-xs font-mono mt-1" dir="ltr">{translations.ur.shopPhone}</p>
-            <div className="inline-block bg-zinc-100 px-4 py-1 rounded-full font-bold urdu-text text-xs border border-zinc-200 mt-3">تفصیلی سونا کھاتہ رپورٹ (Khaata Statement)</div>
-          </div>
-
-          {/* Account Overview table */}
-          <table className="w-full border-collapse text-right text-xs mb-6">
-            <tbody>
-              <tr className="border-b border-zinc-200">
-                <th className="p-2 urdu-text font-black text-zinc-500 w-[20%]">نام کھاتہ دار:</th>
-                <td className="p-2 font-black text-zinc-900 text-sm w-[30%]">{selectedAccount?.name}</td>
-                <th className="p-2 urdu-text font-black text-zinc-500 w-[20%]">فون نمبر:</th>
-                <td className="p-2 font-mono font-bold text-zinc-950 w-[30%]">{selectedAccount?.phone || '-'}</td>
-              </tr>
-              <tr className="border-b border-zinc-200">
-                <th className="p-2 urdu-text font-black text-zinc-500">تاریخ پرنٹ:</th>
-                <td className="p-2 font-mono font-bold text-zinc-750">{formatDate(new Date(), 'ur-PK')}</td>
-                <th className="p-2 urdu-text font-black text-zinc-500">کُل آئٹم پاسا:</th>
-                <td className="p-2 font-mono font-bold text-zinc-900">
-                  {(accountSummary[selectedAccountId || 0]?.gold || 0).toFixed(2)}g
-                </td>
-              </tr>
-              <tr className="border-b border-zinc-200">
-                <th className="p-2 urdu-text font-black text-zinc-500">کُل پاسا دیا/ملا:</th>
-                <td className="p-2 font-mono font-bold text-zinc-900">
-                  {(accountSummary[selectedAccountId || 0]?.totalPasaDia || 0).toFixed(2)}g
-                </td>
-                <th className="p-2 urdu-text font-black text-zinc-500">صاف بقایا:</th>
-                <td className="p-2 font-black text-red-600 text-sm">
-                  {Math.abs(accountSummary[selectedAccountId || 0]?.saafBaqaya || 0).toFixed(2)}g (سونا) {
-                    (accountSummary[selectedAccountId || 0]?.saafBaqaya || 0) > 0.005 ? '(ہمارے ذمہ)' : (accountSummary[selectedAccountId || 0]?.saafBaqaya || 0) < -0.005 ? '(ان کے ذمہ)' : '(حساب صاف)'
-                  }
-                </td>
-              </tr>
-            </tbody>
-          </table>
-
-          {/* Ledger table */}
-          <table className="w-full border border-zinc-300 border-collapse text-right text-xs">
-            <thead>
-              <tr className="bg-zinc-100 font-black text-center text-zinc-800 border-b border-zinc-300">
-                <th className="p-2 border border-zinc-300 urdu-text">تاریخ</th>
-                <th className="p-2 border border-zinc-300 urdu-text">تفصیل اشیاء</th>
-                <th className="p-2 border border-zinc-300 urdu-text">پکائی</th>
-                <th className="p-2 border border-zinc-300 urdu-text">مکس وزن</th>
-                <th className="p-2 border border-zinc-300 urdu-text">کاٹ رتی</th>
-                <th className="p-2 border border-zinc-300 urdu-text">آئٹم پاسا</th>
-                <th className="p-2 border border-zinc-300 urdu-text">پاسا دیا</th>
-                <th className="p-2 border border-zinc-300 urdu-text">بقایا</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ledgerWithRunningBalances.map((e) => {
-                const isGive = e.type === 'give';
-                return (
-                  <tr key={e.id} className="border-b border-zinc-200 text-center hover:bg-zinc-50 transition-colors">
-                    <td className={`p-2 border border-zinc-300 font-bold font-mono ${isGive ? 'text-red-600' : 'text-zinc-600'}`}>{e.date}</td>
-                    <td className={`p-2 border border-zinc-300 urdu-text font-black ${isGive ? 'text-red-700' : 'text-zinc-900'}`}>{e.details}</td>
-                    <td className={`p-2 border border-zinc-300 font-mono font-bold ${isGive ? 'text-red-600' : 'text-orange-700'}`}>{e.pakaye > 0 ? `${parseFloat(e.pakaye.toFixed(2))} R` : '-'}</td>
-                    <td className={`p-2 border border-zinc-300 font-mono font-bold ${isGive ? 'text-red-600' : 'text-zinc-800'}`}>{e.mixWeight > 0 ? `${e.mixWeight.toFixed(2)}g` : '-'}</td>
-                    <td className={`p-2 border border-zinc-300 font-mono font-bold ${isGive ? 'text-red-600' : 'text-zinc-600'}`}>{e.kaatRati > 0 ? `${e.kaatRati} R` : '-'}</td>
-                    <td className={`p-2 border border-zinc-300 font-mono font-black ${isGive ? 'text-red-600' : 'text-emerald-600'}`}>{e.pureWeight > 0 ? `${e.pureWeight.toFixed(2)}g` : '-'}</td>
-                    <td className={`p-2 border border-zinc-300 font-mono font-bold ${isGive ? 'text-red-600' : 'text-gold-dark'}`}>{e.pasaDia > 0 ? `${e.pasaDia.toFixed(2)}g` : '-'}</td>
-                    <td className={`p-2 border border-zinc-300 font-mono font-black ${isGive ? 'text-red-600' : 'text-zinc-950'}`}>{e.runningGold.toFixed(2)}g</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-
-          {/* Statement Terms Footer */}
-          <div className="absolute bottom-8 left-8 right-8 flex justify-between items-center text-[10px] text-zinc-500 border-t pt-4">
-            <span>{translations.ur.shopName} - تصدیق شدہ کھاتہ تفصیل</span>
-            <span>رپورٹ پرنٹ تاریخ: {formatDate(new Date(), 'ur-PK')}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* ==========================================
-          PRINT PREVIEW MODAL
-          ========================================== */}
-      {showPrintPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
-            <div className="p-4 border-b flex justify-between items-center bg-zinc-50">
-              <h3 className="text-xl font-bold urdu-text text-black">پرنٹ خلاصہ (Print Preview)</h3>
-              <button 
-                type="button"
-                onClick={() => {
-                  setShowPrintPreview(false);
-                  setPdfUrl(null);
-                }}
-                className="p-2 hover:bg-zinc-200 rounded-full transition-colors text-black cursor-pointer"
+          {(() => {
+            const chunkLedger = (entries: typeof ledgerWithRunningBalances) => {
+              const pages: (typeof ledgerWithRunningBalances)[] = [];
+              if (entries.length === 0) {
+                pages.push([]);
+                return pages;
+              }
+              const firstPageLimit = 12;
+              const subsequentPageLimit = 18;
+              pages.push(entries.slice(0, firstPageLimit));
+              let index = firstPageLimit;
+              while (index < entries.length) {
+                pages.push(entries.slice(index, index + subsequentPageLimit));
+                index += subsequentPageLimit;
+              }
+              return pages;
+            };
+            const pages = chunkLedger(ledgerWithRunningBalances);
+            return pages.map((pageEntries, pageIndex) => (
+              <div
+                key={pageIndex}
+                className="print-page bg-white relative p-8 w-[800px] h-[1130px] border-[6px] double border-gold rounded-lg mb-6"
+                style={{ fontFamily: 'Inter, sans-serif', boxSizing: 'border-box' }}
+                dir="rtl"
               >
-                <X size={24} />
-              </button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-4 bg-zinc-200 flex justify-center scrollbar-thin scrollbar-thumb-zinc-400">
-              <div className="bg-white shadow-2xl origin-top transition-transform duration-300 transform scale-[0.6] sm:scale-[0.75] md:scale-[0.85] lg:scale-100" style={{ width: '800px', minHeight: '1130px' }}>
-                <div dir="rtl" className="p-8 bg-white text-zinc-900 w-full min-h-full h-auto pb-24 border-[6px] double border-gold rounded-lg relative" style={{ fontFamily: 'Inter, sans-serif' }}>
-                  <div className="absolute inset-4 border border-dashed border-gold rounded pointer-events-none"></div>
-                  
-                  {/* Print Title */}
+                <div className="absolute inset-4 border border-dashed border-gold rounded pointer-events-none"></div>
+                
+                {/* Print Title */}
+                {pageIndex === 0 ? (
                   <div className="text-center border-b-2 border-gold pb-4 mb-6">
                     <h1 className="text-4xl font-black urdu-text text-gold-dark mb-1">{translations.ur.shopName}</h1>
                     <p className="text-sm font-bold text-zinc-500 font-nastaliq">{translations.ur.shopAddress}</p>
                     <p className="text-xs font-mono mt-1" dir="ltr">{translations.ur.shopPhone}</p>
                     <div className="inline-block bg-zinc-100 px-4 py-1 rounded-full font-bold urdu-text text-xs border border-zinc-200 mt-3">تفصیلی سونا کھاتہ رپورٹ (Khaata Statement)</div>
                   </div>
+                ) : (
+                  <div className="flex justify-between items-center border-b-2 border-gold pb-2 mb-4">
+                    <h2 className="text-xl font-bold urdu-text text-gold-dark">{translations.ur.shopName}</h2>
+                    <div className="text-xs text-zinc-500 font-bold urdu-text">
+                      تفصیلی رپورٹ کھاتہ دار: <span className="text-zinc-900 font-black">{selectedAccount?.name}</span> (صفحہ {pageIndex + 1} از {pages.length})
+                    </div>
+                  </div>
+                )}
 
-                  {/* Account Overview table */}
+                {/* Account Overview table */}
+                {pageIndex === 0 && (
                   <table className="w-full border-collapse text-right text-xs mb-6">
                     <tbody>
                       <tr className="border-b border-zinc-200">
@@ -1205,47 +1144,203 @@ export default function Khaata({ lang }: KhaataProps) {
                       </tr>
                     </tbody>
                   </table>
+                )}
 
-                  {/* Ledger table */}
-                  <table className="w-full border border-zinc-300 border-collapse text-right text-xs">
-                    <thead>
-                      <tr className="bg-zinc-100 font-black text-center text-zinc-800 border-b border-zinc-300">
-                        <th className="p-2 border border-zinc-300 urdu-text">تاریخ</th>
-                        <th className="p-2 border border-zinc-300 urdu-text">تفصیل اشیاء</th>
-                        <th className="p-2 border border-zinc-300 urdu-text">پکائی</th>
-                        <th className="p-2 border border-zinc-300 urdu-text">مکس وزن</th>
-                        <th className="p-2 border border-zinc-300 urdu-text">کاٹ رتی</th>
-                        <th className="p-2 border border-zinc-300 urdu-text">آئٹم پاسا</th>
-                        <th className="p-2 border border-zinc-300 urdu-text">پاسا دیا</th>
-                        <th className="p-2 border border-zinc-300 urdu-text">بقایا</th>
+                {/* Ledger table */}
+                <table className="w-full border border-zinc-300 border-collapse text-right text-xs">
+                  <thead>
+                    <tr className="bg-zinc-100 font-black text-center text-zinc-800 border-b border-zinc-300">
+                      <th className="p-2 border border-zinc-300 urdu-text">تاریخ</th>
+                      <th className="p-2 border border-zinc-300 urdu-text">تفصیل اشیاء</th>
+                      <th className="p-2 border border-zinc-300 urdu-text">پکائی</th>
+                      <th className="p-2 border border-zinc-300 urdu-text">مکس وزن</th>
+                      <th className="p-2 border border-zinc-300 urdu-text">کاٹ رتی</th>
+                      <th className="p-2 border border-zinc-300 urdu-text">آئٹم پاسا</th>
+                      <th className="p-2 border border-zinc-300 urdu-text">پاسا دیا</th>
+                      <th className="p-2 border border-zinc-300 urdu-text">بقایا</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pageEntries.map((e) => {
+                      const isGive = e.type === 'give';
+                      return (
+                        <tr key={e.id} className="border-b border-zinc-200 text-center hover:bg-zinc-50 transition-colors">
+                          <td className={`p-2 border border-zinc-300 font-bold font-mono ${isGive ? 'text-red-600' : 'text-zinc-600'}`}>{e.date}</td>
+                          <td className={`p-2 border border-zinc-300 urdu-text font-black ${isGive ? 'text-red-700' : 'text-zinc-900'}`}>{e.details}</td>
+                          <td className={`p-2 border border-zinc-300 font-mono font-bold ${isGive ? 'text-red-600' : 'text-orange-700'}`}>{e.pakaye > 0 ? `${parseFloat(e.pakaye.toFixed(2))} R` : '-'}</td>
+                          <td className={`p-2 border border-zinc-300 font-mono font-bold ${isGive ? 'text-red-600' : 'text-zinc-800'}`}>{e.mixWeight > 0 ? `${e.mixWeight.toFixed(2)}g` : '-'}</td>
+                          <td className={`p-2 border border-zinc-300 font-mono font-bold ${isGive ? 'text-red-600' : 'text-zinc-600'}`}>{e.kaatRati > 0 ? `${e.kaatRati} R` : '-'}</td>
+                          <td className={`p-2 border border-zinc-300 font-mono font-black ${isGive ? 'text-red-600' : 'text-emerald-600'}`}>{e.pureWeight > 0 ? `${e.pureWeight.toFixed(2)}g` : '-'}</td>
+                          <td className={`p-2 border border-zinc-300 font-mono font-bold ${isGive ? 'text-red-600' : 'text-gold-dark'}`}>{e.pasaDia > 0 ? `${e.pasaDia.toFixed(2)}g` : '-'}</td>
+                          <td className={`p-2 border border-zinc-300 font-mono font-black ${isGive ? 'text-red-600' : 'text-zinc-950'}`}>{e.runningGold.toFixed(2)}g</td>
+                        </tr>
+                      );
+                    })}
+                    {pageEntries.length === 0 && pageIndex === 0 && (
+                      <tr>
+                        <td colSpan={8} className="p-8 text-center text-zinc-400 font-bold urdu-text">
+                          کھاتہ میں اب تک کوئی انٹری نہیں ہوئی۔ انٹری کرنے کے لیے اوپر "کھاتہ انٹری کریں" پر کلک کریں۔
+                        </td>
                       </tr>
-                    </thead>
-                     <tbody>
-                       {ledgerWithRunningBalances.map((e) => {
-                         const isGive = e.type === 'give';
-                         return (
-                           <tr key={e.id} className="border-b border-zinc-200 text-center hover:bg-zinc-50 transition-colors">
-                             <td className={`p-2 border border-zinc-300 font-bold font-mono ${isGive ? 'text-red-600' : 'text-zinc-600'}`}>{e.date}</td>
-                             <td className={`p-2 border border-zinc-300 urdu-text font-black ${isGive ? 'text-red-700' : 'text-zinc-900'}`}>{e.details}</td>
-                             <td className={`p-2 border border-zinc-300 font-mono font-bold ${isGive ? 'text-red-600' : 'text-orange-700'}`}>{e.pakaye > 0 ? `${parseFloat(e.pakaye.toFixed(2))} R` : '-'}</td>
-                             <td className={`p-2 border border-zinc-300 font-mono font-bold ${isGive ? 'text-red-600' : 'text-zinc-800'}`}>{e.mixWeight > 0 ? `${e.mixWeight.toFixed(2)}g` : '-'}</td>
-                             <td className={`p-2 border border-zinc-300 font-mono font-bold ${isGive ? 'text-red-600' : 'text-zinc-600'}`}>{e.kaatRati > 0 ? `${e.kaatRati} R` : '-'}</td>
-                             <td className={`p-2 border border-zinc-300 font-mono font-black ${isGive ? 'text-red-600' : 'text-emerald-600'}`}>{e.pureWeight > 0 ? `${e.pureWeight.toFixed(2)}g` : '-'}</td>
-                             <td className={`p-2 border border-zinc-300 font-mono font-bold ${isGive ? 'text-red-600' : 'text-gold-dark'}`}>{e.pasaDia > 0 ? `${e.pasaDia.toFixed(2)}g` : '-'}</td>
-                             <td className={`p-2 border border-zinc-300 font-mono font-black ${isGive ? 'text-red-600' : 'text-zinc-950'}`}>{e.runningGold.toFixed(2)}g</td>
-                           </tr>
-                         );
-                       })}
-                     </tbody>
-                  </table>
+                    )}
+                  </tbody>
+                </table>
 
-                  {/* Statement Terms Footer */}
-                  <div className="absolute bottom-8 left-8 right-8 flex justify-between items-center text-[10px] text-zinc-500 border-t pt-4">
-                    <span>{translations.ur.shopName} - تصدیق شدہ کھاتہ تفصیل</span>
-                    <span>رپورٹ پرنٹ تاریخ: {formatDate(new Date(), 'ur-PK')}</span>
-                  </div>
+                {/* Statement Terms Footer */}
+                <div className="absolute bottom-8 left-8 right-8 flex justify-between items-center text-[10px] text-zinc-500 border-t pt-4">
+                  <span>{translations.ur.shopName} - تصدیق شدہ کھاتہ تفصیل</span>
+                  <span>صفحہ {pageIndex + 1} از {pages.length}</span>
                 </div>
               </div>
+            ));
+          })()}
+        </div>
+      </div>
+
+      {/* ==========================================
+          PRINT PREVIEW MODAL
+          ========================================== */}
+      {showPrintPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+            <div className="p-4 border-b flex justify-between items-center bg-zinc-50">
+              <h3 className="text-xl font-bold urdu-text text-black">پرنٹ خلاصہ (Print Preview)</h3>
+              <button 
+                type="button"
+                onClick={() => {
+                  setShowPrintPreview(false);
+                  setPdfUrl(null);
+                }}
+                className="p-2 hover:bg-zinc-200 rounded-full transition-colors text-black cursor-pointer"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-6 md:p-12 bg-zinc-100 flex flex-col items-center gap-10 scrollbar-thin scrollbar-thumb-zinc-400">
+              {(() => {
+                const chunkLedger = (entries: typeof ledgerWithRunningBalances) => {
+                  const pages: (typeof ledgerWithRunningBalances)[] = [];
+                  if (entries.length === 0) {
+                    pages.push([]);
+                    return pages;
+                  }
+                  const firstPageLimit = 12;
+                  const subsequentPageLimit = 18;
+                  pages.push(entries.slice(0, firstPageLimit));
+                  let index = firstPageLimit;
+                  while (index < entries.length) {
+                    pages.push(entries.slice(index, index + subsequentPageLimit));
+                    index += subsequentPageLimit;
+                  }
+                  return pages;
+                };
+                const pages = chunkLedger(ledgerWithRunningBalances);
+                return pages.map((pageEntries, pageIndex) => (
+                  <div 
+                    key={pageIndex}
+                    className="w-[320px] h-[452px] sm:w-[480px] sm:h-[678px] md:w-[600px] md:h-[848px] lg:w-[800px] lg:h-[1130px] overflow-hidden relative shadow-2xl rounded-xl bg-white border border-zinc-200"
+                  >
+                    <div 
+                      className="absolute top-0 left-0 origin-top-left scale-[0.4] sm:scale-[0.6] md:scale-[0.75] lg:scale-100 bg-white p-8 w-[800px] h-[1130px] border-[6px] double border-gold rounded-lg relative"
+                      style={{ fontFamily: 'Inter, sans-serif', boxSizing: 'border-box' }}
+                      dir="rtl"
+                    >
+                      <div className="absolute inset-4 border border-dashed border-gold rounded pointer-events-none"></div>
+                      
+                      {/* Print Title */}
+                      {pageIndex === 0 ? (
+                        <div className="text-center border-b-2 border-gold pb-4 mb-6">
+                          <h1 className="text-4xl font-black urdu-text text-gold-dark mb-1">{translations.ur.shopName}</h1>
+                          <p className="text-sm font-bold text-zinc-500 font-nastaliq">{translations.ur.shopAddress}</p>
+                          <p className="text-xs font-mono mt-1" dir="ltr">{translations.ur.shopPhone}</p>
+                          <div className="inline-block bg-zinc-100 px-4 py-1 rounded-full font-bold urdu-text text-xs border border-zinc-200 mt-3">تفصیلی سونا کھاتہ رپورٹ (Khaata Statement)</div>
+                        </div>
+                      ) : (
+                        <div className="flex justify-between items-center border-b-2 border-gold pb-2 mb-4">
+                          <h2 className="text-xl font-bold urdu-text text-gold-dark">{translations.ur.shopName}</h2>
+                          <div className="text-xs text-zinc-500 font-bold urdu-text">
+                            تفصیلی رپورٹ کھاتہ دار: <span className="text-zinc-900 font-black">{selectedAccount?.name}</span> (صفحہ {pageIndex + 1} از {pages.length})
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Account Overview table */}
+                      {pageIndex === 0 && (
+                        <table className="w-full border-collapse text-right text-xs mb-6">
+                          <tbody>
+                            <tr className="border-b border-zinc-200">
+                              <th className="p-2 urdu-text font-black text-zinc-500 w-[20%]">نام کھاتہ دار:</th>
+                              <td className="p-2 font-black text-zinc-900 text-sm w-[30%]">{selectedAccount?.name}</td>
+                              <th className="p-2 urdu-text font-black text-zinc-500 w-[20%]">فون نمبر:</th>
+                              <td className="p-2 font-mono font-bold text-zinc-950 w-[30%]">{selectedAccount?.phone || '-'}</td>
+                            </tr>
+                            <tr className="border-b border-zinc-200">
+                              <th className="p-2 urdu-text font-black text-zinc-500">تاریخ پرنٹ:</th>
+                              <td className="p-2 font-mono font-bold text-zinc-750">{formatDate(new Date(), 'ur-PK')}</td>
+                              <th className="p-2 urdu-text font-black text-zinc-500">کُل آئٹم پاسا:</th>
+                              <td className="p-2 font-mono font-bold text-zinc-900">
+                                {(accountSummary[selectedAccountId || 0]?.gold || 0).toFixed(2)}g
+                              </td>
+                            </tr>
+                            <tr className="border-b border-zinc-200">
+                              <th className="p-2 urdu-text font-black text-zinc-500">کُل پاسا دیا/ملا:</th>
+                              <td className="p-2 font-mono font-bold text-zinc-900">
+                                {(accountSummary[selectedAccountId || 0]?.totalPasaDia || 0).toFixed(2)}g
+                              </td>
+                              <th className="p-2 urdu-text font-black text-zinc-500">صاف بقایا:</th>
+                              <td className="p-2 font-black text-red-600 text-sm">
+                                {Math.abs(accountSummary[selectedAccountId || 0]?.saafBaqaya || 0).toFixed(2)}g (سونا) {
+                                  (accountSummary[selectedAccountId || 0]?.saafBaqaya || 0) > 0.005 ? '(ہمارے ذمہ)' : (accountSummary[selectedAccountId || 0]?.saafBaqaya || 0) < -0.005 ? '(ان کے ذمہ)' : '(حساب صاف)'
+                                }
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      )}
+
+                      {/* Ledger table */}
+                      <table className="w-full border border-zinc-300 border-collapse text-right text-xs">
+                        <thead>
+                          <tr className="bg-zinc-100 font-black text-center text-zinc-800 border-b border-zinc-300">
+                            <th className="p-2 border border-zinc-300 urdu-text">تاریخ</th>
+                            <th className="p-2 border border-zinc-300 urdu-text">تفصیل اشیاء</th>
+                            <th className="p-2 border border-zinc-300 urdu-text">پکائی</th>
+                            <th className="p-2 border border-zinc-300 urdu-text">مکس وزن</th>
+                            <th className="p-2 border border-zinc-300 urdu-text">کاٹ رتی</th>
+                            <th className="p-2 border border-zinc-300 urdu-text">آئٹم پاسا</th>
+                            <th className="p-2 border border-zinc-300 urdu-text">پاسا دیا</th>
+                            <th className="p-2 border border-zinc-300 urdu-text">بقایا</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {pageEntries.map((e) => {
+                            const isGive = e.type === 'give';
+                            return (
+                              <tr key={e.id} className="border-b border-zinc-200 text-center hover:bg-zinc-50 transition-colors">
+                                <td className={`p-2 border border-zinc-300 font-bold font-mono ${isGive ? 'text-red-600' : 'text-zinc-600'}`}>{e.date}</td>
+                                <td className={`p-2 border border-zinc-300 urdu-text font-black ${isGive ? 'text-red-700' : 'text-zinc-900'}`}>{e.details}</td>
+                                <td className={`p-2 border border-zinc-300 font-mono font-bold ${isGive ? 'text-red-600' : 'text-orange-700'}`}>{e.pakaye > 0 ? `${parseFloat(e.pakaye.toFixed(2))} R` : '-'}</td>
+                                <td className={`p-2 border border-zinc-300 font-mono font-bold ${isGive ? 'text-red-600' : 'text-zinc-800'}`}>{e.mixWeight > 0 ? `${e.mixWeight.toFixed(2)}g` : '-'}</td>
+                                <td className={`p-2 border border-zinc-300 font-mono font-bold ${isGive ? 'text-red-600' : 'text-zinc-600'}`}>{e.kaatRati > 0 ? `${e.kaatRati} R` : '-'}</td>
+                                <td className={`p-2 border border-zinc-300 font-mono font-black ${isGive ? 'text-red-600' : 'text-emerald-600'}`}>{e.pureWeight > 0 ? `${e.pureWeight.toFixed(2)}g` : '-'}</td>
+                                <td className={`p-2 border border-zinc-300 font-mono font-bold ${isGive ? 'text-red-600' : 'text-gold-dark'}`}>{e.pasaDia > 0 ? `${e.pasaDia.toFixed(2)}g` : '-'}</td>
+                                <td className={`p-2 border border-zinc-300 font-mono font-black ${isGive ? 'text-red-600' : 'text-zinc-950'}`}>{e.runningGold.toFixed(2)}g</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+
+                      {/* Statement Terms Footer */}
+                      <div className="absolute bottom-8 left-8 right-8 flex justify-between items-center text-[10px] text-zinc-500 border-t pt-4">
+                        <span>{translations.ur.shopName} - تصدیق شدہ کھاتہ تفصیل</span>
+                        <span>صفحہ {pageIndex + 1} از {pages.length}</span>
+                      </div>
+                    </div>
+                  </div>
+                ));
+              })()}
               
               {!pdfUrl && (
                 <div className="absolute top-4 right-4 bg-white/90 backdrop-blur px-3 py-1.5 rounded-full shadow-sm flex items-center gap-2">
