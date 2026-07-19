@@ -101,34 +101,69 @@ export default function Khaata({ lang }: KhaataProps) {
     try {
       window.scrollTo(0, 0);
       
-      const canvas = await html2canvas(printRef.current, {
-        scale: 3.0, // High quality
+      const element = printRef.current;
+      const elementHeight = element.scrollHeight || element.offsetHeight || 1130;
+      
+      const canvas = await html2canvas(element, {
+        scale: 2.5, // High quality, balanced for memory
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
         allowTaint: false,
-        imageTimeout: 2000,
+        imageTimeout: 3000,
         windowWidth: 800,
+        windowHeight: elementHeight,
+        height: elementHeight,
         onclone: (clonedDoc) => {
           clonedDoc.body.style.margin = '0';
           clonedDoc.body.style.padding = '0';
           clonedDoc.body.style.backgroundColor = '#ffffff';
           clonedDoc.body.style.width = '800px';
+          clonedDoc.body.style.height = `${elementHeight}px`;
+          clonedDoc.body.style.overflow = 'visible';
+          
+          // Force container to lay out fully and visible
+          const clonedContainer = clonedDoc.querySelector('[data-print-container]');
+          if (clonedContainer) {
+            (clonedContainer as HTMLElement).style.position = 'relative';
+            (clonedContainer as HTMLElement).style.left = '0';
+            (clonedContainer as HTMLElement).style.opacity = '1';
+            (clonedContainer as HTMLElement).style.width = '800px';
+            (clonedContainer as HTMLElement).style.height = 'auto';
+            (clonedContainer as HTMLElement).style.overflow = 'visible';
+            (clonedContainer as HTMLElement).style.display = 'block';
+          }
         }
       });
-      const imgData = canvas.toDataURL('image/jpeg', 0.8);
+      const imgData = canvas.toDataURL('image/jpeg', 0.85);
 
       const canvasWidth = canvas.width;
       const canvasHeight = canvas.height;
       const pdfWidth = 21.0; // A4 width in cm
-      const pdfHeight = (canvasHeight / canvasWidth) * pdfWidth;
+      const pdfPageHeight = 29.7; // A4 height in cm
+      const totalPdfHeight = (canvasHeight / canvasWidth) * pdfWidth;
 
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'cm',
-        format: [pdfWidth, pdfHeight]
+        format: 'a4'
       });
-      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+
+      let heightLeft = totalPdfHeight;
+      let position = 0;
+
+      // Add first page
+      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, totalPdfHeight);
+      heightLeft -= pdfPageHeight;
+
+      // Loop to add more pages if the table is long and spans multiple A4 pages
+      while (heightLeft > 0) {
+        position -= pdfPageHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, totalPdfHeight);
+        heightLeft -= pdfPageHeight;
+      }
+
       return pdf.output('datauristring');
     } catch (error) {
       console.error("PDF Error:", error);
@@ -1005,8 +1040,24 @@ export default function Khaata({ lang }: KhaataProps) {
       {/* ==========================================
           OFF-SCREEN CAPTURE AREA FOR PDF/PRINT
           ========================================== */}
-      <div className="absolute -left-[9999px] top-0 opacity-0 pointer-events-none">
+      <div data-print-container className="absolute -left-[9999px] top-0 opacity-0 pointer-events-none">
         <div ref={printRef} dir="rtl" className="p-8 bg-white text-zinc-900 w-[800px] min-h-[1130px] border-[6px] double border-gold rounded-lg relative" style={{ fontFamily: 'Inter, sans-serif' }}>
+          <style dangerouslySetInnerHTML={{ __html: `
+            @media print {
+              @page {
+                size: A4 portrait !important;
+                margin: 0 !important;
+              }
+              body {
+                margin: 0 !important;
+                padding: 0 !important;
+                background: white !important;
+              }
+              tr {
+                page-break-inside: avoid !important;
+              }
+            }
+          ` }} />
           <div className="absolute inset-4 border border-dashed border-gold rounded pointer-events-none"></div>
           
           {/* Print Title */}
@@ -1085,7 +1136,7 @@ export default function Khaata({ lang }: KhaataProps) {
           {/* Statement Terms Footer */}
           <div className="absolute bottom-8 left-8 right-8 flex justify-between items-center text-[10px] text-zinc-500 border-t pt-4">
             <span>{translations.ur.shopName} - تصدیق شدہ کھاتہ تفصیل</span>
-            <span className="font-mono">Page 1 of 1</span>
+            <span>رپورٹ پرنٹ تاریخ: {formatDate(new Date(), 'ur-PK')}</span>
           </div>
         </div>
       </div>
@@ -1112,7 +1163,7 @@ export default function Khaata({ lang }: KhaataProps) {
             
             <div className="flex-1 overflow-y-auto p-4 bg-zinc-200 flex justify-center scrollbar-thin scrollbar-thumb-zinc-400">
               <div className="bg-white shadow-2xl origin-top transition-transform duration-300 transform scale-[0.6] sm:scale-[0.75] md:scale-[0.85] lg:scale-100" style={{ width: '800px', minHeight: '1130px' }}>
-                <div dir="rtl" className="p-8 bg-white text-zinc-900 w-full h-full border-[6px] double border-gold rounded-lg relative" style={{ fontFamily: 'Inter, sans-serif' }}>
+                <div dir="rtl" className="p-8 bg-white text-zinc-900 w-full min-h-full h-auto pb-24 border-[6px] double border-gold rounded-lg relative" style={{ fontFamily: 'Inter, sans-serif' }}>
                   <div className="absolute inset-4 border border-dashed border-gold rounded pointer-events-none"></div>
                   
                   {/* Print Title */}
@@ -1191,7 +1242,7 @@ export default function Khaata({ lang }: KhaataProps) {
                   {/* Statement Terms Footer */}
                   <div className="absolute bottom-8 left-8 right-8 flex justify-between items-center text-[10px] text-zinc-500 border-t pt-4">
                     <span>{translations.ur.shopName} - تصدیق شدہ کھاتہ تفصیل</span>
-                    <span className="font-mono">Page 1 of 1</span>
+                    <span>رپورٹ پرنٹ تاریخ: {formatDate(new Date(), 'ur-PK')}</span>
                   </div>
                 </div>
               </div>
