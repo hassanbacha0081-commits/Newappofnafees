@@ -12,7 +12,8 @@ import {
   Menu,
   X,
   Languages,
-  Wallet
+  Wallet,
+  BookOpen
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { translations, type Language } from './translations';
@@ -36,6 +37,7 @@ import Reports from './components/Reports';
 import Settings from './components/Settings';
 import LockScreen from './components/LockScreen';
 import Expenses from './components/Expenses';
+import Khaata from './components/Khaata';
 
 import { APP_CONFIG } from './config';
 import { 
@@ -48,7 +50,7 @@ import {
 } from './lib/googleDriveBackup';
 import { Cloud, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 
-type Section = 'billing' | 'purchases' | 'records' | 'orders' | 'karigar' | 'repairs' | 'stock' | 'customers' | 'expenses' | 'reports' | 'settings';
+type Section = 'billing' | 'purchases' | 'records' | 'orders' | 'karigar' | 'repairs' | 'stock' | 'customers' | 'expenses' | 'reports' | 'settings' | 'khaata';
 
 export default function App() {
   const [lang, setLang] = useState<Language>('ur');
@@ -120,8 +122,10 @@ export default function App() {
             const stock = await db.stock.toArray();
             const settings = await db.settings.toArray();
             const goldPurchases = await db.goldPurchases.toArray();
+            const khaataAccounts = await db.khaataAccounts.toArray();
+            const khaataEntries = await db.khaataEntries.toArray();
 
-            const data = { sales, orders, karigars, repairs, stock, settings, goldPurchases };
+            const data = { sales, orders, karigars, repairs, stock, settings, goldPurchases, khaataAccounts, khaataEntries };
             const fileName = `nafees_jewellers_autobackup_${now.toISOString().split('T')[0]}.json`;
             const jsonString = JSON.stringify(data);
             
@@ -287,6 +291,8 @@ export default function App() {
       await db.settings.clear();
       await db.goldPurchases.clear();
       if (db.expenses) await db.expenses.clear();
+      if (db.khaataAccounts) await db.khaataAccounts.clear();
+      if (db.khaataEntries) await db.khaataEntries.clear();
 
       if (data.sales) await db.sales.bulkAdd(data.sales);
       if (data.orders) await db.orders.bulkAdd(data.orders);
@@ -296,6 +302,8 @@ export default function App() {
       if (data.settings) await db.settings.bulkAdd(data.settings);
       if (data.goldPurchases) await db.goldPurchases.bulkAdd(data.goldPurchases);
       if (data.expenses && db.expenses) await db.expenses.bulkAdd(data.expenses);
+      if (data.khaataAccounts && db.khaataAccounts) await db.khaataAccounts.bulkAdd(data.khaataAccounts);
+      if (data.khaataEntries && db.khaataEntries) await db.khaataEntries.bulkAdd(data.khaataEntries);
 
       await db.settings.put({ key: 'hasBeenInitialized', value: 'true' });
       await db.settings.put({ key: 'googleDriveConnected', value: 'true' });
@@ -388,6 +396,7 @@ export default function App() {
     { id: 'orders', icon: Package, label: t.orders },
     { id: 'karigar', icon: Users, label: t.karigar },
     { id: 'repairs', icon: Wrench, label: t.repairs },
+    { id: 'khaata', icon: BookOpen, label: t.khaata },
     { id: 'stock', icon: Package, label: t.stock },
     { id: 'customers', icon: Users, label: t.customers },
     { id: 'expenses', icon: Wallet, label: t.expenses },
@@ -405,6 +414,7 @@ export default function App() {
       case 'stock': return <Stock lang={lang} />;
       case 'customers': return <Customers lang={lang} />;
       case 'expenses': return <Expenses lang={lang} />;
+      case 'khaata': return <Khaata lang={lang} />;
       case 'reports': return <Reports lang={lang} />;
       case 'settings': return <Settings lang={lang} setGoldRate={setGoldRate} setLang={setLang} />;
       default: return <Billing lang={lang} editingSale={editingSale} setEditingSale={setEditingSale} />;

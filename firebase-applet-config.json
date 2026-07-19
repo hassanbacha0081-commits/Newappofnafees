@@ -6,5 +6,6 @@
   "storageBucket": "engaged-striker-cj4jh.firebasestorage.app",
   "messagingSenderId": "832891644845",
   "measurementId": "",
-  "oAuthClientId": "832891644845-1p2fddt518q3s6c2lan134plq9tkjiqj.apps.googleusercontent.com"
+  "oAuthClientId": "832891644845-1p2fddt518q3s6c2lan134plq9tkjiqj.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
 }

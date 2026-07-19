@@ -16,6 +16,7 @@ export const translations = {
     stock: "اسٹاک",
     reports: "رپورٹس",
     settings: "سیٹنگز",
+    khaata: "کھاتہ",
     businessOverview: "کاروباری جائزہ",
     todaysSales: "آج کی سیلز",
     pendingPayments: "کل واجب الادا",
@@ -155,7 +156,8 @@ export const translations = {
       "دلہن سیٹ",
       "کالر سیٹ",
       "ملتانی سیٹ",
-      "بریسلٹ"
+      "بریسلٹ",
+      "پاسا"
     ]
   },
   en: {
@@ -173,6 +175,7 @@ export const translations = {
     stock: "Stock",
     reports: "Reports",
     settings: "Settings",
+    khaata: "Khaata",
     businessOverview: "Business Overview",
     todaysSales: "Today's Sales",
     pendingPayments: "Pending Payments",
@@ -312,7 +315,8 @@ export const translations = {
       "Dulhan set",
       "Collar set",
       "Multani set",
-      "Bracelet"
+      "Bracelet",
+      "Pasa"
     ]
   }
 };

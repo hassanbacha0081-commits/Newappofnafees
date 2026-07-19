@@ -4,7 +4,7 @@ import { db, type StockItem } from '../db';
 import { translations, type Language } from '../translations';
 import { Plus, Trash2, Edit2, Package, Coins, Camera, RotateCcw, Image as ImageIcon, AlertTriangle, Printer, X, Download, AlertCircle, Search } from 'lucide-react';
 import { useReactToPrint } from 'react-to-print';
-import html2canvas from 'html2canvas';
+import { html2canvasWithOklch as html2canvas } from '../lib/html2canvas-helper';
 import jsPDF from 'jspdf';
 import { PrintReceipt } from './PrintReceipt';
 import { ConfirmModal } from './ConfirmModal';

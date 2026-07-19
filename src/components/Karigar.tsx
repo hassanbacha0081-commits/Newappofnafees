@@ -5,7 +5,7 @@ import { translations, type Language } from '../translations';
 import { formatCurrency, formatDate, formatWhatsAppUrl, compressImage } from '../lib/utils';
 import { Plus, Check, Trash2, Camera, RotateCcw, MessageCircle, Printer, Edit, Image as ImageIcon, AlertTriangle, X, Download, AlertCircle, Users } from 'lucide-react';
 import { useReactToPrint } from 'react-to-print';
-import html2canvas from 'html2canvas';
+import { html2canvasWithOklch as html2canvas } from '../lib/html2canvas-helper';
 import jsPDF from 'jspdf';
 import { PrintReceipt } from './PrintReceipt';
 import { ConfirmModal } from './ConfirmModal';
@@ -42,6 +42,7 @@ export default function Karigar({ lang }: KarigarProps) {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [settlementData, setSettlementData] = useState<{ record: KarigarRecord; amount: number; date: string } | null>(null);
 
   const [printData, setPrintData] = useState<{ data: KarigarRecord, id: number } | null>(null);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
@@ -214,10 +215,11 @@ export default function Karigar({ lang }: KarigarProps) {
 
     if (editId) {
       entry.id = editId;
-      // If editing and no new image, keep old image
-      if (!currentImg) {
-        const old = await db.karigars.get(editId);
-        if (old) entry.img = old.img;
+      const old = await db.karigars.get(editId);
+      if (old) {
+        if (!currentImg) entry.img = old.img;
+        entry.receivedRemaining = old.receivedRemaining;
+        entry.settledDate = old.settledDate;
       }
       await db.karigars.put(entry);
     } else {
@@ -491,68 +493,88 @@ export default function Karigar({ lang }: KarigarProps) {
       </div>
 
       <div className="space-y-4">
-        {karigars?.map((v) => (
-          <div 
-            key={v.id} 
-            className="bg-white p-4 rounded-xl border border-sky-200 shadow-sm border-r-8 border-gold"
-          >
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm font-bold urdu-text text-zinc-500">نام / تاریخ:</span>
-              <span className="text-sm text-zinc-900"><b>{v.name}</b> ({v.date})</span>
-            </div>
-            <div className="flex justify-between items-center mb-4">
-              <span className="text-sm font-bold urdu-text text-zinc-500">بقایا:</span>
-              <b className="text-red-600 text-lg">{v.net.toFixed(2)}g</b>
-            </div>
-            
-            <div className="flex gap-2 pt-4 border-t border-sky-100 flex-wrap">
-              <button 
-                onClick={() => {
-                  setPrintData({ data: v, id: v.id! });
-                  setShowPrintPreview(true);
-                  setTimeout(async () => {
-                    const url = await generatePDF(v, v.id!);
-                      if (url) {
-                        setPdfUrl(url);
-                      } else {
-                        setShowPrintPreview(false);
-                        alert('PDF generation failed. Please try again or check the image format.');
-                      }
-                  }, 400);
-                }}
-                className="flex-1 min-w-[80px] p-2 bg-sky-50 text-gold-dark rounded-lg hover:bg-gold hover:text-black transition-all text-xs font-bold urdu-text flex items-center justify-center gap-1 border border-sky-100"
-              >
-                <Printer size={14} /> رسید
-              </button>
-              <button 
-                onClick={() => editE(v)}
-                className="flex-1 min-w-[80px] p-2 bg-sky-50 text-zinc-600 rounded-lg hover:bg-sky-100 transition-all text-xs font-bold urdu-text flex items-center justify-center gap-1 border border-sky-100"
-              >
-                <Edit size={14} /> ایڈٹ
-              </button>
-              <button 
-                onClick={() => sendW(v.phone, v.name, v.net)}
-                className="flex-1 min-w-[80px] p-2 bg-green-600-10 text-green-600 rounded-lg hover:bg-green-600 hover:text-white transition-all text-xs font-bold urdu-text flex items-center justify-center gap-1 border border-green-600-20"
-              >
-                <MessageCircle size={14} /> واٹس ایپ
-              </button>
-              {v.img && (
+        {karigars?.map((v) => {
+          const outstandingGold = v.net - (v.receivedRemaining || 0);
+          return (
+            <div 
+              key={v.id} 
+              className="bg-white p-4 rounded-xl border border-sky-200 shadow-sm border-r-8 border-gold"
+            >
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm font-bold urdu-text text-zinc-500">نام / تاریخ:</span>
+                <span className="text-sm text-zinc-900"><b>{v.name}</b> ({v.date})</span>
+              </div>
+              <div className="flex justify-between items-center mb-4">
+                <span className="text-sm font-bold urdu-text text-zinc-500">بقایا:</span>
+                {outstandingGold <= 0.005 ? (
+                  <span className="bg-emerald-100 text-emerald-800 text-xs px-3 py-1.5 rounded-full font-bold urdu-text border border-emerald-200">صاف کلیئر (Cleared)</span>
+                ) : (
+                  <div className="flex flex-col items-end">
+                    <b className="text-red-600 text-lg">{outstandingGold.toFixed(2)}g</b>
+                    {v.receivedRemaining && v.receivedRemaining > 0 ? (
+                      <span className="text-[10px] text-zinc-500 font-bold urdu-text">کُل بقایا: {v.net.toFixed(2)}g | وصول شدہ: {v.receivedRemaining.toFixed(2)}g</span>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex gap-2 pt-4 border-t border-sky-100 flex-wrap">
                 <button 
-                  onClick={() => showImg(v.img!)}
+                  onClick={() => {
+                    setPrintData({ data: v, id: v.id! });
+                    setShowPrintPreview(true);
+                    setTimeout(async () => {
+                      const url = await generatePDF(v, v.id!);
+                        if (url) {
+                          setPdfUrl(url);
+                        } else {
+                          setShowPrintPreview(false);
+                          alert('PDF generation failed. Please try again or check the image format.');
+                        }
+                    }, 400);
+                  }}
+                  className="flex-1 min-w-[80px] p-2 bg-sky-50 text-gold-dark rounded-lg hover:bg-gold hover:text-black transition-all text-xs font-bold urdu-text flex items-center justify-center gap-1 border border-sky-100"
+                >
+                  <Printer size={14} /> رسید
+                </button>
+                {outstandingGold > 0.005 && (
+                  <button 
+                    onClick={() => setSettlementData({ record: v, amount: parseFloat(outstandingGold.toFixed(2)), date: formatDate(new Date(), 'ur-PK') })}
+                    className="flex-1 min-w-[100px] p-2 bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-600 hover:text-white transition-all text-xs font-bold urdu-text flex items-center justify-center gap-1 border border-emerald-100"
+                  >
+                    <Check size={14} /> وصول سونا
+                  </button>
+                )}
+                <button 
+                  onClick={() => editE(v)}
                   className="flex-1 min-w-[80px] p-2 bg-sky-50 text-zinc-600 rounded-lg hover:bg-sky-100 transition-all text-xs font-bold urdu-text flex items-center justify-center gap-1 border border-sky-100"
                 >
-                  <ImageIcon size={14} /> رپورٹ
+                  <Edit size={14} /> ایڈٹ
                 </button>
-              )}
-              <button 
-                onClick={() => v.id && setDeleteId(v.id)}
-                className="flex-1 min-w-[80px] p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-all text-xs font-bold urdu-text flex items-center justify-center gap-1 border border-red-200"
-              >
-                <Trash2 size={14} /> ختم
-              </button>
+                <button 
+                  onClick={() => sendW(v.phone, v.name, outstandingGold)}
+                  className="flex-1 min-w-[80px] p-2 bg-green-600-10 text-green-600 rounded-lg hover:bg-green-600 hover:text-white transition-all text-xs font-bold urdu-text flex items-center justify-center gap-1 border border-green-600-20"
+                >
+                  <MessageCircle size={14} /> واٹس ایپ
+                </button>
+                {v.img && (
+                  <button 
+                    onClick={() => showImg(v.img!)}
+                    className="flex-1 min-w-[80px] p-2 bg-sky-50 text-zinc-600 rounded-lg hover:bg-sky-100 transition-all text-xs font-bold urdu-text flex items-center justify-center gap-1 border border-sky-100"
+                  >
+                    <ImageIcon size={14} /> رپورٹ
+                  </button>
+                )}
+                <button 
+                  onClick={() => v.id && setDeleteId(v.id)}
+                  className="flex-1 min-w-[80px] p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-all text-xs font-bold urdu-text flex items-center justify-center gap-1 border border-red-200"
+                >
+                  <Trash2 size={14} /> ختم
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <ContactPickerModal
@@ -567,6 +589,81 @@ export default function Karigar({ lang }: KarigarProps) {
         }}
         lang={lang}
       />
+      
+      {/* Settle Remaining Gold Modal */}
+      {settlementData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col border border-sky-100">
+            <div className="p-5 border-b flex justify-between items-center bg-sky-950/5">
+              <h3 className="text-lg font-bold urdu-text text-sky-950">بقایا سونا وصول کریں (Receive Gold)</h3>
+              <button 
+                type="button"
+                onClick={() => setSettlementData(null)}
+                className="p-1.5 hover:bg-zinc-150 rounded-full text-zinc-500 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="text-right">
+                <span className="text-xs font-bold text-zinc-400 urdu-text block mb-1">کاریگر کا نام</span>
+                <p className="p-3 bg-zinc-50 border border-zinc-150 rounded-xl text-zinc-800 font-bold text-sm text-center">{settlementData.record.name}</p>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-zinc-500 urdu-text block mb-1 text-right pr-1">تاریخ وصولی (Date)</label>
+                <input 
+                  type="text" 
+                  value={settlementData.date}
+                  onChange={e => setSettlementData({ ...settlementData, date: e.target.value })}
+                  className="w-full p-4 border border-sky-200 rounded-xl outline-none focus:border-gold text-black text-center font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-zinc-500 urdu-text block mb-1 text-right pr-1">وصول شدہ وزن - گرام (Gold Weight)</label>
+                <input 
+                  type="number" 
+                  placeholder="0.00g"
+                  value={settlementData.amount || ''}
+                  onChange={e => setSettlementData({ ...settlementData, amount: Number(e.target.value) })}
+                  className="w-full p-4 border border-sky-200 rounded-xl outline-none focus:border-gold text-black text-center font-mono font-bold text-emerald-600 text-lg"
+                />
+              </div>
+            </div>
+
+            <div className="p-5 border-t bg-zinc-50 flex gap-3">
+              <button 
+                type="button"
+                onClick={() => setSettlementData(null)}
+                className="flex-1 py-3 bg-zinc-200 text-zinc-700 font-bold rounded-xl hover:bg-zinc-300 transition-all urdu-text text-base"
+              >
+                کینسل (Cancel)
+              </button>
+              <button 
+                type="button"
+                onClick={async () => {
+                  if (settlementData.amount <= 0) {
+                    alert(lang === 'ur' ? "براہ کرم درست وزن لکھیں!" : "Please enter a valid weight!");
+                    return;
+                  }
+                  const updatedRecord: KarigarRecord = {
+                    ...settlementData.record,
+                    receivedRemaining: (settlementData.record.receivedRemaining || 0) + settlementData.amount,
+                    settledDate: settlementData.date
+                  };
+                  await db.karigars.put(updatedRecord);
+                  setSettlementData(null);
+                }}
+                className="flex-[2] py-3 bg-gold text-black font-bold rounded-xl hover:bg-gold-light transition-all urdu-text text-base shadow-md"
+              >
+                محفوظ کریں (Settle)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {lightboxImage && (
         <ImageLightbox src={lightboxImage} onClose={() => setLightboxImage(null)} title={lang === 'ur' ? 'لیبارٹری رپورٹ' : 'Lab Report'} />
       )}

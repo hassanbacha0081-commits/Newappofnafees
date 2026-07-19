@@ -187,60 +187,104 @@ export default function ContactPickerModal({ isOpen, onClose, onSelect, lang }: 
     setLoading(true);
     try {
       if (Capacitor.isNativePlatform()) {
-        const permission = await Contacts.requestPermissions();
-        if (permission.contacts !== 'granted') {
-          alert(isUrdu 
-            ? 'رابطوں تک رسائی کی اجازت نہیں ملی۔' 
-            : 'Permission to access contacts was denied.'
-          );
-          setLoading(false);
-          return;
-        }
-
-        const result = await Contacts.getContacts({
-          projection: {
-            name: true,
-            phones: true
-          }
-        });
-
-        if (result && result.contacts && result.contacts.length > 0) {
-          let importedCount = 0;
+        try {
+          console.log('Opening native contact picker using Contacts.pickContact()...');
+          const result = await Contacts.pickContact({
+            projection: {
+              name: true,
+              phones: true
+            }
+          });
           
-          for (const deviceContact of result.contacts) {
-            const rawName = (deviceContact.name as any)?.display || (deviceContact as any).displayName || '';
-            const rawPhone = deviceContact.phones && deviceContact.phones[0] && deviceContact.phones[0].number
-              ? deviceContact.phones[0].number
+          if (result && result.contact) {
+            const c = result.contact;
+            const rawName = (c.name as any)?.display || (c as any).displayName || '';
+            const rawPhone = c.phones && c.phones[0] && c.phones[0].number
+              ? c.phones[0].number
               : '';
-            
+
             if (rawName && rawPhone) {
               const formattedPhone = cleanPhoneNumber(rawPhone);
+              
+              // Add to local database history so it shows up in Browse
               const existing = await db.contacts.where({ phone: formattedPhone }).first();
               if (!existing) {
                 await db.contacts.add({
                   name: rawName,
                   phone: formattedPhone
                 });
-                importedCount++;
               }
+
+              // Instantly select the picked contact and close the picker
+              onSelect({ name: rawName, phone: formattedPhone });
+              onClose();
+              return;
+            } else {
+              alert(isUrdu 
+                ? 'منتخب کردہ رابطے میں درست فون نمبر نہیں ملا۔' 
+                : 'Selected contact does not have a valid phone number.'
+              );
             }
           }
+        } catch (pickErr: any) {
+          console.warn('pickContact failed, falling back to bulk getContacts:', pickErr);
+          
+          // Request permissions for bulk fetch fallback
+          const permission = await Contacts.requestPermissions();
+          if (permission.contacts !== 'granted') {
+            alert(isUrdu 
+              ? 'رابطوں تک رسائی کی اجازت نہیں ملی۔' 
+              : 'Permission to access contacts was denied.'
+            );
+            setLoading(false);
+            return;
+          }
 
-          setImportStatus({
-            success: true,
-            count: importedCount,
-            message: isUrdu 
-              ? `${importedCount} نئے رابطے کامیابی سے موبائل سے Nafees ERP میں درآمد کر لیے گئے ہیں!`
-              : `Successfully imported ${importedCount} new contacts from your device contacts book!`
+          const result = await Contacts.getContacts({
+            projection: {
+              name: true,
+              phones: true
+            }
           });
 
-          await loadContacts();
-          setActiveTab('browse');
-        } else {
-          alert(isUrdu 
-            ? 'موبائل میں کوئی رابطہ نہیں ملا۔' 
-            : 'No contacts found on your device.'
-          );
+          if (result && result.contacts && result.contacts.length > 0) {
+            let importedCount = 0;
+            
+            for (const deviceContact of result.contacts) {
+              const rawName = (deviceContact.name as any)?.display || (deviceContact as any).displayName || '';
+              const rawPhone = deviceContact.phones && deviceContact.phones[0] && deviceContact.phones[0].number
+                ? deviceContact.phones[0].number
+                : '';
+              
+              if (rawName && rawPhone) {
+                const formattedPhone = cleanPhoneNumber(rawPhone);
+                const existing = await db.contacts.where({ phone: formattedPhone }).first();
+                if (!existing) {
+                  await db.contacts.add({
+                    name: rawName,
+                    phone: formattedPhone
+                  });
+                  importedCount++;
+                }
+              }
+            }
+
+            setImportStatus({
+              success: true,
+              count: importedCount,
+              message: isUrdu 
+                ? `${importedCount} نئے رابطے کامیابی سے موبائل سے Nafees ERP میں درآمد کر لیے گئے ہیں!`
+                : `Successfully imported ${importedCount} new contacts from your device contacts book!`
+            });
+
+            await loadContacts();
+            setActiveTab('browse');
+          } else {
+            alert(isUrdu 
+              ? 'موبائل میں کوئی رابطہ نہیں ملا۔' 
+              : 'No contacts found on your device.'
+            );
+          }
         }
       } else if (typeof navigator !== 'undefined' && 'contacts' in navigator && 'select' in (navigator as any).contacts) {
         if (isIframe) {
@@ -251,40 +295,32 @@ export default function ContactPickerModal({ isOpen, onClose, onSelect, lang }: 
           setLoading(false);
           return;
         }
+
         const props = ['name', 'tel'];
-        const opts = { multiple: true };
+        const opts = { multiple: false };
         const selected = await (navigator as any).contacts.select(props, opts);
         
         if (selected && selected.length > 0) {
-          let importedCount = 0;
+          const deviceContact = selected[0];
+          const rawName = deviceContact.name && deviceContact.name[0] ? deviceContact.name[0] : '';
+          const rawPhone = deviceContact.tel && deviceContact.tel[0] ? deviceContact.tel[0] : '';
           
-          for (const deviceContact of selected) {
-            const rawName = deviceContact.name && deviceContact.name[0] ? deviceContact.name[0] : '';
-            const rawPhone = deviceContact.tel && deviceContact.tel[0] ? deviceContact.tel[0] : '';
+          if (rawName && rawPhone) {
+            const formattedPhone = cleanPhoneNumber(rawPhone);
             
-            if (rawName && rawPhone) {
-              const formattedPhone = cleanPhoneNumber(rawPhone);
-              const existing = await db.contacts.where({ phone: formattedPhone }).first();
-              if (!existing) {
-                await db.contacts.add({
-                  name: rawName,
-                  phone: formattedPhone
-                });
-                importedCount++;
-              }
+            // Add to database
+            const existing = await db.contacts.where({ phone: formattedPhone }).first();
+            if (!existing) {
+              await db.contacts.add({
+                name: rawName,
+                phone: formattedPhone
+              });
             }
+
+            // Instantly select the picked contact and close the picker
+            onSelect({ name: rawName, phone: formattedPhone });
+            onClose();
           }
-
-          setImportStatus({
-            success: true,
-            count: importedCount,
-            message: isUrdu 
-              ? `${importedCount} رابطے کامیابی سے موبائل سے درآمد کر لیے گئے ہیں!`
-              : `Successfully imported ${importedCount} contacts from your device!`
-          });
-
-          await loadContacts();
-          setActiveTab('browse');
         }
       } else {
         alert(isUrdu 
@@ -510,10 +546,10 @@ export default function ContactPickerModal({ isOpen, onClose, onSelect, lang }: 
             </div>
 
             {/* Navigation Tabs */}
-            <div className="flex border-b border-sky-100 bg-sky-50/40 p-1 mx-6 mt-4 rounded-xl">
+            <div className="flex border-b border-sky-100 bg-sky-50/40 p-1 mx-6 mt-4 rounded-xl gap-0.5 overflow-x-auto scrollbar-none">
               <button
                 onClick={() => { setActiveTab('browse'); setImportStatus(null); }}
-                className={`flex-1 py-2 text-xs md:text-sm font-bold rounded-lg transition-all urdu-text ${
+                className={`flex-1 py-2 px-2.5 text-xs md:text-sm font-bold rounded-lg transition-all urdu-text whitespace-nowrap ${
                   activeTab === 'browse' ? 'bg-white text-sky-900 shadow-sm border border-sky-100/50' : 'text-zinc-500 hover:text-zinc-800'
                 }`}
               >
@@ -521,7 +557,7 @@ export default function ContactPickerModal({ isOpen, onClose, onSelect, lang }: 
               </button>
               <button
                 onClick={() => { setActiveTab('device'); setImportStatus(null); }}
-                className={`flex-1 py-2 text-xs md:text-sm font-bold rounded-lg transition-all urdu-text ${
+                className={`flex-1 py-2 px-2.5 text-xs md:text-sm font-bold rounded-lg transition-all urdu-text whitespace-nowrap ${
                   activeTab === 'device' ? 'bg-white text-sky-900 shadow-sm border border-sky-100/50' : 'text-zinc-500 hover:text-zinc-800'
                 }`}
               >
@@ -529,7 +565,7 @@ export default function ContactPickerModal({ isOpen, onClose, onSelect, lang }: 
               </button>
               <button
                 onClick={() => { setActiveTab('import'); setImportStatus(null); }}
-                className={`flex-1 py-2 text-xs md:text-sm font-bold rounded-lg transition-all urdu-text ${
+                className={`flex-1 py-2 px-2.5 text-xs md:text-sm font-bold rounded-lg transition-all urdu-text whitespace-nowrap ${
                   activeTab === 'import' ? 'bg-white text-sky-900 shadow-sm border border-sky-100/50' : 'text-zinc-500 hover:text-zinc-800'
                 }`}
               >

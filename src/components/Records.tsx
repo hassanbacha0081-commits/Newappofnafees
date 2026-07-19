@@ -6,7 +6,7 @@ import { Search, Printer, Trash2, Edit, MessageCircle, X, AlertTriangle, History
 import { motion, AnimatePresence } from 'motion/react';
 import { formatWhatsAppUrl } from '../lib/utils';
 import { useReactToPrint } from 'react-to-print';
-import html2canvas from 'html2canvas';
+import { html2canvasWithOklch as html2canvas } from '../lib/html2canvas-helper';
 import jsPDF from 'jspdf';
 import { PrintReceipt } from './PrintReceipt';
 import { ConfirmModal } from './ConfirmModal';

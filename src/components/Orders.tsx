@@ -6,7 +6,7 @@ import { formatCurrency, formatDate, formatWhatsAppUrl, compressImage } from '..
 import { Plus, Check, Trash2, Camera, RotateCcw, MessageCircle, Printer, X, Download, AlertCircle, ImageIcon, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useReactToPrint } from 'react-to-print';
-import html2canvas from 'html2canvas';
+import { html2canvasWithOklch as html2canvas } from '../lib/html2canvas-helper';
 import jsPDF from 'jspdf';
 import { PrintReceipt } from './PrintReceipt';
 import { MultiSelectInput } from './MultiSelectInput';

@@ -62,6 +62,30 @@ export interface KarigarRecord {
   net: number;
   img?: string | null;
   date: string;
+  receivedRemaining?: number; // Cumulative gold received later to clear/settle remaining
+  settledDate?: string;       // Date of settlement
+}
+
+export interface KhaataAccount {
+  id?: number;
+  name: string;
+  phone: string;
+  date: string;
+  notes?: string;
+}
+
+export interface KhaataEntry {
+  id?: number;
+  accountId: number;
+  date: string;
+  details: string;        // Items details
+  type: 'give' | 'receive'; // give = بنام (دیا / Out), receive = جمع (وصول / In)
+  mixWeight: number;      // Mix weight (g)
+  pakaye: number;         // Pakaye (g)
+  kaatRati: number;       // Kaat in rati
+  pureWeight: number;     // Pure weight (g)
+  pasaDia: number;        // Pasa Gold given/received (g)
+  img?: string | null;    // Image base64 or URL
 }
 
 export interface Repair {
@@ -127,6 +151,8 @@ export class MyDatabase extends Dexie {
   goldPurchases!: Table<GoldPurchase>;
   expenses!: Table<Expense>;
   contacts!: Table<PhoneContact>;
+  khaataAccounts!: Table<KhaataAccount>;
+  khaataEntries!: Table<KhaataEntry>;
 
   constructor() {
     super('NafeesERP_V56_Final');
@@ -150,6 +176,32 @@ export class MyDatabase extends Dexie {
       goldPurchases: '++id, name, phone, date',
       expenses: '++id, category, date',
       contacts: '++id, name, phone'
+    });
+    this.version(8).stores({
+      sales: '++id, name, phone, date',
+      orders: '++id, name, phone, status, due, karigar',
+      karigars: '++id, name, phone, date',
+      repairs: '++id, customerName, status, date',
+      stock: '++id, name, type, [name+type]',
+      settings: 'key',
+      goldPurchases: '++id, name, phone, date',
+      expenses: '++id, category, date',
+      contacts: '++id, name, phone',
+      khaataAccounts: '++id, name, phone',
+      khaataEntries: '++id, accountId, date'
+    });
+    this.version(9).stores({
+      sales: '++id, name, phone, date',
+      orders: '++id, name, phone, status, due, karigar',
+      karigars: '++id, name, phone, date',
+      repairs: '++id, customerName, status, date',
+      stock: '++id, name, type, [name+type]',
+      settings: 'key',
+      goldPurchases: '++id, name, phone, date',
+      expenses: '++id, category, date',
+      contacts: '++id, name, phone',
+      khaataAccounts: '++id, name, phone',
+      khaataEntries: '++id, accountId, date'
     });
   }
 }

@@ -5,11 +5,11 @@ export const APP_CONFIG = {
   
   // Shop Details (Urdu)
   shopNameUrdu: "نفیس جیولرز",
-  shopAddressUrdu: "فائزہ مارکیٹ عبداللہ محلہ گجو خان روڈ مردان",
+  shopAddressUrdu: "فائزہ مارکیٹ عبد ا محلہ گجو خان روڈ مردان",
   
   // Shop Details (English)
   shopNameEnglish: "Nafees Jewellers",
-  shopAddressEnglish: "Faiza market Abdullah mohallah Gajo khan road mardan.",
+  shopAddressEnglish: "Faiza market Abdu A mohala Gajo khan road mardan.",
   
   // Contact Info
   phone1: "03150023776",

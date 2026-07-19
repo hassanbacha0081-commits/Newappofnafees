@@ -156,6 +156,8 @@ export default function Settings({ lang, setGoldRate, setLang }: SettingsProps) 
           await db.settings.clear();
           await db.goldPurchases.clear();
           if (db.expenses) await db.expenses.clear();
+          if (db.khaataAccounts) await db.khaataAccounts.clear();
+          if (db.khaataEntries) await db.khaataEntries.clear();
 
           if (data.sales) await db.sales.bulkAdd(data.sales);
           if (data.orders) await db.orders.bulkAdd(data.orders);
@@ -165,6 +167,8 @@ export default function Settings({ lang, setGoldRate, setLang }: SettingsProps) 
           if (data.settings) await db.settings.bulkAdd(data.settings);
           if (data.goldPurchases) await db.goldPurchases.bulkAdd(data.goldPurchases);
           if (data.expenses && db.expenses) await db.expenses.bulkAdd(data.expenses);
+          if (data.khaataAccounts && db.khaataAccounts) await db.khaataAccounts.bulkAdd(data.khaataAccounts);
+          if (data.khaataEntries && db.khaataEntries) await db.khaataEntries.bulkAdd(data.khaataEntries);
 
           // Re-set drive connected flag so it stays connected
           await db.settings.put({ key: 'googleDriveConnected', value: 'true' });
@@ -357,8 +361,10 @@ export default function Settings({ lang, setGoldRate, setLang }: SettingsProps) 
       const stock = await db.stock.toArray();
       const settings = await db.settings.toArray();
       const goldPurchases = await db.goldPurchases.toArray();
+      const khaataAccounts = db.khaataAccounts ? await db.khaataAccounts.toArray() : [];
+      const khaataEntries = db.khaataEntries ? await db.khaataEntries.toArray() : [];
 
-      const data = { sales, orders, karigars, repairs, stock, settings, goldPurchases };
+      const data = { sales, orders, karigars, repairs, stock, settings, goldPurchases, khaataAccounts, khaataEntries };
       const fileName = `nafees_jewellers_backup_${new Date().toISOString().split('T')[0]}.json`;
       const jsonString = JSON.stringify(data);
 
@@ -414,6 +420,8 @@ export default function Settings({ lang, setGoldRate, setLang }: SettingsProps) 
             await db.stock.clear();
             await db.settings.clear();
             await db.goldPurchases.clear();
+            if (db.khaataAccounts) await db.khaataAccounts.clear();
+            if (db.khaataEntries) await db.khaataEntries.clear();
 
             if (data.sales) await db.sales.bulkAdd(data.sales);
             if (data.orders) await db.orders.bulkAdd(data.orders);
@@ -422,6 +430,8 @@ export default function Settings({ lang, setGoldRate, setLang }: SettingsProps) 
             if (data.stock) await db.stock.bulkAdd(data.stock);
             if (data.settings) await db.settings.bulkAdd(data.settings);
             if (data.goldPurchases) await db.goldPurchases.bulkAdd(data.goldPurchases);
+            if (data.khaataAccounts && db.khaataAccounts) await db.khaataAccounts.bulkAdd(data.khaataAccounts);
+            if (data.khaataEntries && db.khaataEntries) await db.khaataEntries.bulkAdd(data.khaataEntries);
 
             alert(lang === 'ur' ? 'ڈیٹا کامیابی سے بحال ہو گیا ہے' : 'Data restored successfully');
             window.location.reload();
@@ -447,7 +457,9 @@ export default function Settings({ lang, setGoldRate, setLang }: SettingsProps) 
             db.repairs.clear(),
             db.stock.clear(),
             db.settings.clear(),
-            db.goldPurchases.clear()
+            db.goldPurchases.clear(),
+            db.khaataAccounts ? db.khaataAccounts.clear() : Promise.resolve(),
+            db.khaataEntries ? db.khaataEntries.clear() : Promise.resolve()
           ]);
           window.location.reload();
         } catch (err) {

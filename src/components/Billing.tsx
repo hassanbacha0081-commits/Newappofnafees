@@ -5,7 +5,7 @@ import { formatDate, compressImage } from '../lib/utils';
 import { Camera, RotateCcw, Trash2, Printer, Plus, X, ShoppingBag, Download, AlertCircle, CheckCircle2, Users, ImageIcon } from 'lucide-react';
 import { useReactToPrint } from 'react-to-print';
 import { AnimatePresence, motion } from 'motion/react';
-import html2canvas from 'html2canvas';
+import { html2canvasWithOklch as html2canvas } from '../lib/html2canvas-helper';
 import jsPDF from 'jspdf';
 import { PrintReceipt } from './PrintReceipt';
 import { MultiSelectInput } from './MultiSelectInput';
