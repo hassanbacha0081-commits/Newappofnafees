@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Order } from '../db';
 import { translations, type Language } from '../translations';
 import { formatCurrency, formatDate, formatWhatsAppUrl, compressImage } from '../lib/utils';
-import { Plus, Check, Trash2, Camera, RotateCcw, MessageCircle, Printer, X, Download, AlertCircle, ImageIcon, Users } from 'lucide-react';
+import { Plus, Check, Trash2, Camera, RotateCcw, MessageCircle, Printer, X, Download, AlertCircle, ImageIcon, Users, Search } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useReactToPrint } from 'react-to-print';
 import { html2canvasWithOklch as html2canvas } from '../lib/html2canvas-helper';
@@ -47,6 +47,7 @@ export default function Orders({ lang }: OrdersProps) {
     mazdori: 0,
     total: 0,
     recAmt: 0,
+    discount: 0,
     status: 'pending',
     makingCharges: '',
     weightPolish: '',
@@ -191,6 +192,7 @@ export default function Orders({ lang }: OrdersProps) {
           o.name.toLowerCase().includes(term) || 
           o.phone.includes(searchTerm) ||
           o.karigar.toLowerCase().includes(term) ||
+          (o.item && o.item.toLowerCase().includes(term)) ||
           o.id?.toString() === searchTerm
         )
         .reverse()
@@ -217,7 +219,7 @@ export default function Orders({ lang }: OrdersProps) {
   const totalOrdersMazdori = orders?.reduce((sum, o) => sum + (o.mazdori || 0), 0) || 0;
 
   const updateRem = () => {
-    if (editId) { return formData.total - formData.payments.reduce((s, p) => s + p.amt, 0); } return formData.total - formData.recAmt;
+    if (editId) { return formData.total - formData.payments.reduce((s, p) => s + p.amt, 0) - formData.discount; } return formData.total - formData.recAmt - formData.discount;
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -252,6 +254,7 @@ export default function Orders({ lang }: OrdersProps) {
       total: formData.total,
       payments: editId ? formData.payments : [{ amt: formData.recAmt, date: formatDate(new Date(), 'ur-PK') }],
       rem: updateRem(),
+      discount: formData.discount,
       status: formData.status,
       img: currentImg,
       makingCharges: formData.makingCharges ? parseFloat(Number(formData.makingCharges).toFixed(2)).toString() : '',
@@ -299,6 +302,7 @@ export default function Orders({ lang }: OrdersProps) {
       mazdori: 0,
       total: 0,
       recAmt: 0,
+      discount: 0,
       status: 'pending',
       makingCharges: '',
       weightPolish: '',
@@ -323,7 +327,8 @@ export default function Orders({ lang }: OrdersProps) {
       price: order.price || 0,
       mazdori: order.mazdori || 0,
       total: order.total,
-      recAmt: order.total - order.rem,
+      recAmt: order.total - order.rem - (order.discount || 0),
+      discount: order.discount || 0,
       status: order.status,
       makingCharges: order.makingCharges || '',
       weightPolish: order.weightPolish || '',
@@ -871,6 +876,16 @@ export default function Orders({ lang }: OrdersProps) {
                 )}
               </div>
             )}
+            <div className="space-y-1">
+              <label className="text-xs text-zinc-500 urdu-text">رعایت / چھوٹ (Discount):</label>
+              <input 
+                type="number" 
+                value={formData.discount || ''}
+                onChange={e => setFormData({ ...formData, discount: Number(e.target.value) })}
+                className="w-full p-3 bg-white border border-sky-200 rounded-lg outline-none focus:border-gold text-black"
+                placeholder="e.g. 500"
+              />
+            </div>
           </div>
           
           <div className="mt-6 p-4 bg-sky-50 rounded-xl border border-gold-20 flex justify-between items-center shadow-inner">
@@ -898,13 +913,29 @@ export default function Orders({ lang }: OrdersProps) {
         </div>
       )}
 
-      <div className="mb-6">
-        <input 
-          type="text" 
-          className="w-full p-4 bg-white border border-sky-200 rounded-xl outline-none focus:border-gold shadow-sm text-black"
-          value={searchTerm}
-          onChange={e => setSearchTerm(e.target.value)}
-        />
+      <div className="mb-6 flex flex-col sm:flex-row gap-4 items-stretch sm:items-center bg-white p-4 rounded-xl border border-sky-200 shadow-sm">
+        <div className="relative flex-1">
+          <input 
+            type="text" 
+            className="w-full p-3.5 pl-11 pr-10 bg-zinc-50 border border-sky-200 rounded-xl outline-none focus:border-gold shadow-inner text-black font-semibold text-sm"
+            value={searchTerm}
+            placeholder={lang === 'ur' ? 'نام، فون، کاریگر یا آئٹم تلاش کریں...' : 'Search by name, phone, karigar, or item...'}
+            onChange={e => setSearchTerm(e.target.value)}
+          />
+          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400">
+            <Search size={18} />
+          </div>
+          {searchTerm && (
+            <div className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400">
+              <X size={18} className="cursor-pointer hover:text-red-500" onClick={() => setSearchTerm('')} />
+            </div>
+          )}
+        </div>
+        {searchTerm && (
+          <span className="bg-gold/10 text-gold-dark border border-gold/30 px-4 py-2 rounded-xl text-xs font-bold font-mono whitespace-nowrap self-center text-center">
+            {lang === 'ur' ? `${orders?.length || 0} آرڈرز ملے` : `${orders?.length || 0} orders found`}
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

@@ -32,6 +32,7 @@ export default function Khaata({ lang }: KhaataProps) {
   // State Management
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [itemSearchTerm, setItemSearchTerm] = useState('');
   const [isAddingAccount, setIsAddingAccount] = useState(false);
   const [isContactPickerOpen, setIsContactPickerOpen] = useState(false);
   
@@ -288,6 +289,15 @@ export default function Khaata({ lang }: KhaataProps) {
       };
     });
   }, [selectedEntries]);
+
+  // Filter ledger entries by item name / details search term
+  const filteredLedgerEntries = useMemo(() => {
+    if (!itemSearchTerm) return ledgerWithRunningBalances;
+    const term = itemSearchTerm.toLowerCase().trim();
+    return ledgerWithRunningBalances.filter(e => 
+      e.details && e.details.toLowerCase().includes(term)
+    );
+  }, [ledgerWithRunningBalances, itemSearchTerm]);
 
   // Handle auto calculations
   const calculatePure = (mix: number, kaat: number, pak: number) => {
@@ -645,7 +655,10 @@ export default function Khaata({ lang }: KhaataProps) {
           <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 bg-white p-5 rounded-2xl shadow-sm border border-sky-100">
             <div className="flex items-center gap-3">
               <button
-                onClick={() => setSelectedAccountId(null)}
+                onClick={() => {
+                  setSelectedAccountId(null);
+                  setItemSearchTerm('');
+                }}
                 className="p-2.5 hover:bg-sky-50 rounded-xl transition-colors border border-sky-100 text-sky-950"
               >
                 <ChevronLeft size={24} />
@@ -950,43 +963,70 @@ export default function Khaata({ lang }: KhaataProps) {
           )}
 
           {/* LEDGER TRANSACTIONS TABLE */}
-          <div className="bg-white rounded-2xl border border-sky-100 shadow-sm overflow-hidden">
-            <div className="p-4 bg-sky-950/5 border-b flex justify-between items-center">
-              <h3 className="font-bold text-sky-950 urdu-text text-base">تفصیلی لیجر بک (Running Ledger Statement)</h3>
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
+            <div className="p-4 bg-zinc-50 border-b flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="font-bold text-black urdu-text text-base">تفصیلی لیجر بک (Running Ledger Statement)</h3>
+                {itemSearchTerm && (
+                  <span className="bg-gold/10 text-gold-dark border border-gold/30 px-2.5 py-0.5 rounded-full text-xs font-bold font-mono">
+                    {lang === 'ur' ? `${filteredLedgerEntries.length} آئٹمز ملے` : `${filteredLedgerEntries.length} items found`}
+                  </span>
+                )}
+              </div>
+              
+              {/* Item Search Bar */}
+              <div className="relative w-full sm:w-72" dir={isRTL ? "rtl" : "ltr"}>
+                <input
+                  type="text"
+                  placeholder={lang === 'ur' ? "آئٹم تلاش کریں (جیسے انگوٹھی، کانٹا)..." : "Search item (e.g. angoti, kanta)..."}
+                  value={itemSearchTerm}
+                  onChange={e => setItemSearchTerm(e.target.value)}
+                  className={`w-full py-2 border border-zinc-200 rounded-xl outline-none focus:border-gold text-xs text-black font-semibold bg-white ${isRTL ? 'text-right pr-10 pl-8' : 'text-left pl-10 pr-8'}`}
+                />
+                <Search className={`absolute top-1/2 -translate-y-1/2 text-zinc-400 ${isRTL ? 'right-3' : 'left-3'}`} size={16} />
+                {itemSearchTerm && (
+                  <button
+                    onClick={() => setItemSearchTerm('')}
+                    className={`absolute top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 transition-colors cursor-pointer ${isRTL ? 'left-3' : 'right-3'}`}
+                  >
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
             </div>
             
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-right text-xs min-w-[850px]">
                 <thead>
-                  <tr className="bg-sky-950 text-white font-bold urdu-text text-center">
-                    <th className="p-4 border border-sky-900 w-[11%]">تاریخ</th>
-                    <th className="p-4 border border-sky-900 w-[18%]">تفصیل اشیاء</th>
-                    <th className="p-4 border border-sky-900">پکائی</th>
-                    <th className="p-4 border border-sky-900 bg-sky-900">مکس وزن</th>
-                    <th className="p-4 border border-sky-900">کاٹ رتی</th>
-                    <th className="p-4 border border-sky-900 bg-sky-900">آئٹم پاسا</th>
-                    <th className="p-4 border border-sky-900 text-gold">پاسا دیا</th>
-                    <th className="p-4 border border-sky-900">بقایا</th>
-                    <th className="p-4 border border-sky-900 w-[8%]">تصویر</th>
-                    <th className="p-4 border border-sky-900 w-[10%]">کارروائیاں</th>
+                  <tr className="bg-zinc-100 text-black font-bold urdu-text text-center border-b border-zinc-200">
+                    <th className="p-4 border border-zinc-200 w-[11%]">تاریخ</th>
+                    <th className="p-4 border border-zinc-200 w-[18%]">تفصیل اشیاء</th>
+                    <th className="p-4 border border-zinc-200">پکائی</th>
+                    <th className="p-4 border border-zinc-200">مکس وزن</th>
+                    <th className="p-4 border border-zinc-200">کاٹ رتی</th>
+                    <th className="p-4 border border-zinc-200">آئٹم پاسا</th>
+                    <th className="p-4 border border-zinc-200">پاسا دیا</th>
+                    <th className="p-4 border border-zinc-200">بقایا</th>
+                    <th className="p-4 border border-zinc-200 w-[8%]">تصویر</th>
+                    <th className="p-4 border border-zinc-200 w-[10%]">کارروائیاں</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {ledgerWithRunningBalances.map((e, index) => {
+                  {filteredLedgerEntries.map((e, index) => {
                     const isGive = e.type === 'give';
                     return (
                       <tr 
                         key={e.id} 
-                        className="border-b border-zinc-100 text-center font-medium hover:bg-sky-50/35 transition-colors"
+                        className="border-b border-zinc-100 text-center font-medium hover:bg-zinc-50 transition-colors"
                       >
-                        <td className={`p-3 font-bold font-mono ${isGive ? 'text-red-600' : 'text-zinc-600'}`}>{e.date}</td>
-                        <td className={`p-3 font-bold urdu-text text-right px-4 ${isGive ? 'text-red-700' : 'text-sky-950'}`}>{e.details}</td>
-                        <td className={`p-3 font-mono font-bold ${isGive ? 'text-red-600' : 'text-orange-700'}`}>{e.pakaye > 0 ? `${parseFloat(e.pakaye.toFixed(2))} R` : '-'}</td>
-                        <td className={`p-3 font-mono font-bold ${isGive ? 'text-red-600' : 'text-zinc-900'}`}>{e.mixWeight > 0 ? `${e.mixWeight.toFixed(2)}g` : '-'}</td>
-                        <td className={`p-3 font-mono font-bold ${isGive ? 'text-red-600' : 'text-zinc-600'}`}>{e.kaatRati > 0 ? `${e.kaatRati} R` : '-'}</td>
-                        <td className={`p-3 font-mono font-black ${isGive ? 'text-red-600' : 'text-emerald-600'}`}>{e.pureWeight > 0 ? `${e.pureWeight.toFixed(2)}g` : '-'}</td>
-                        <td className={`p-3 font-mono font-bold ${isGive ? 'text-red-600' : 'text-gold-dark'}`}>{e.pasaDia > 0 ? `${e.pasaDia.toFixed(2)}g` : '-'}</td>
-                        <td className={`p-3 font-mono font-black ${isGive ? 'text-red-600' : 'text-sky-950'}`}>{e.runningGold.toFixed(2)}g</td>
+                        <td className="p-3 font-bold font-mono text-black">{e.date}</td>
+                        <td className="p-3 font-bold urdu-text text-right px-4 text-black">{e.details}</td>
+                        <td className="p-3 font-mono font-bold text-black">{e.pakaye > 0 ? `${parseFloat(e.pakaye.toFixed(2))} R` : '-'}</td>
+                        <td className="p-3 font-mono font-bold text-black">{e.mixWeight > 0 ? `${e.mixWeight.toFixed(2)}g` : '-'}</td>
+                        <td className="p-3 font-mono font-bold text-black">{e.kaatRati > 0 ? `${e.kaatRati} R` : '-'}</td>
+                        <td className="p-3 font-mono font-bold text-black">{e.pureWeight > 0 ? `${e.pureWeight.toFixed(2)}g` : '-'}</td>
+                        <td className="p-3 font-mono font-bold text-black">{e.pasaDia > 0 ? `${e.pasaDia.toFixed(2)}g` : '-'}</td>
+                        <td className="p-3 font-mono font-bold text-black">{e.runningGold.toFixed(2)}g</td>
                         <td className="p-3">
                           {e.img ? (
                             <button
@@ -1021,10 +1061,13 @@ export default function Khaata({ lang }: KhaataProps) {
                       </tr>
                     );
                   })}
-                  {ledgerWithRunningBalances.length === 0 && (
+                  {filteredLedgerEntries.length === 0 && (
                     <tr>
                       <td colSpan={10} className="p-8 text-center text-zinc-400 font-bold urdu-text">
-                        کھاتہ میں اب تک کوئی انٹری نہیں ہوئی۔ انٹری کرنے کے لیے اوپر "کھاتہ انٹری کریں" پر کلک کریں۔
+                        {itemSearchTerm 
+                          ? (lang === 'ur' ? "اس آئٹم کا کوئی ریکارڈ نہیں ملا۔" : "No records found for this item.")
+                          : (lang === 'ur' ? "کھاتہ میں اب تک کوئی انٹری نہیں ہوئی۔ انٹری کرنے کے لیے اوپر \"کھاتہ انٹری کریں\" پر کلک کریں۔" : "No transactions found yet. Click 'Add Transaction' to start.")
+                        }
                       </td>
                     </tr>
                   )}
@@ -1085,7 +1128,7 @@ export default function Khaata({ lang }: KhaataProps) {
               }
               return pages;
             };
-            const pages = chunkLedger(ledgerWithRunningBalances);
+            const pages = chunkLedger(filteredLedgerEntries);
             return pages.map((pageEntries, pageIndex) => (
               <div
                 key={pageIndex}
@@ -1101,7 +1144,10 @@ export default function Khaata({ lang }: KhaataProps) {
                     <h1 className="text-4xl font-black urdu-text text-gold-dark mb-1">{translations.ur.shopName}</h1>
                     <p className="text-sm font-bold text-zinc-500 font-nastaliq">{translations.ur.shopAddress}</p>
                     <p className="text-xs font-mono mt-1" dir="ltr">{translations.ur.shopPhone}</p>
-                    <div className="inline-block bg-zinc-100 px-4 py-1 rounded-full font-bold urdu-text text-xs border border-zinc-200 mt-3">تفصیلی سونا کھاتہ رپورٹ (Khaata Statement)</div>
+                    <div className="inline-block bg-zinc-100 px-4 py-1 rounded-full font-bold urdu-text text-xs border border-zinc-200 mt-3">
+                      تفصیلی سونا کھاتہ رپورٹ (Khaata Statement)
+                      {itemSearchTerm && ` - فلٹر: ${itemSearchTerm}`}
+                    </div>
                   </div>
                 ) : (
                   <div className="flex justify-between items-center border-b-2 border-gold pb-2 mb-4">
@@ -1117,26 +1163,26 @@ export default function Khaata({ lang }: KhaataProps) {
                   <table className="w-full border-collapse text-right text-xs mb-6">
                     <tbody>
                       <tr className="border-b border-zinc-200">
-                        <th className="p-2 urdu-text font-black text-zinc-500 w-[20%]">نام کھاتہ دار:</th>
-                        <td className="p-2 font-black text-zinc-900 text-sm w-[30%]">{selectedAccount?.name}</td>
-                        <th className="p-2 urdu-text font-black text-zinc-500 w-[20%]">فون نمبر:</th>
-                        <td className="p-2 font-mono font-bold text-zinc-950 w-[30%]">{selectedAccount?.phone || '-'}</td>
+                        <th className="p-2 urdu-text font-bold text-black w-[20%]">نام کھاتہ دار:</th>
+                        <td className="p-2 font-bold text-black text-sm w-[30%]">{selectedAccount?.name}</td>
+                        <th className="p-2 urdu-text font-bold text-black w-[20%]">فون نمبر:</th>
+                        <td className="p-2 font-mono font-bold text-black w-[30%]">{selectedAccount?.phone || '-'}</td>
                       </tr>
                       <tr className="border-b border-zinc-200">
-                        <th className="p-2 urdu-text font-black text-zinc-500">تاریخ پرنٹ:</th>
-                        <td className="p-2 font-mono font-bold text-zinc-750">{formatDate(new Date(), 'ur-PK')}</td>
-                        <th className="p-2 urdu-text font-black text-zinc-500">کُل آئٹم پاسا:</th>
-                        <td className="p-2 font-mono font-bold text-zinc-900">
+                        <th className="p-2 urdu-text font-bold text-black">تاریخ پرنٹ:</th>
+                        <td className="p-2 font-mono font-bold text-black">{formatDate(new Date(), 'ur-PK')}</td>
+                        <th className="p-2 urdu-text font-bold text-black">کُل آئٹم پاسا:</th>
+                        <td className="p-2 font-mono font-bold text-black">
                           {(accountSummary[selectedAccountId || 0]?.gold || 0).toFixed(2)}g
                         </td>
                       </tr>
                       <tr className="border-b border-zinc-200">
-                        <th className="p-2 urdu-text font-black text-zinc-500">کُل پاسا دیا/ملا:</th>
-                        <td className="p-2 font-mono font-bold text-zinc-900">
+                        <th className="p-2 urdu-text font-bold text-black">کُل پاسا دیا/ملا:</th>
+                        <td className="p-2 font-mono font-bold text-black">
                           {(accountSummary[selectedAccountId || 0]?.totalPasaDia || 0).toFixed(2)}g
                         </td>
-                        <th className="p-2 urdu-text font-black text-zinc-500">صاف بقایا:</th>
-                        <td className="p-2 font-black text-red-600 text-sm">
+                        <th className="p-2 urdu-text font-bold text-black">صاف بقایا:</th>
+                        <td className="p-2 font-bold text-black text-sm">
                           {Math.abs(accountSummary[selectedAccountId || 0]?.saafBaqaya || 0).toFixed(2)}g (سونا) {
                             (accountSummary[selectedAccountId || 0]?.saafBaqaya || 0) > 0.005 ? '(ہمارے ذمہ)' : (accountSummary[selectedAccountId || 0]?.saafBaqaya || 0) < -0.005 ? '(ان کے ذمہ)' : '(حساب صاف)'
                           }
@@ -1149,7 +1195,7 @@ export default function Khaata({ lang }: KhaataProps) {
                 {/* Ledger table */}
                 <table className="w-full border border-zinc-300 border-collapse text-right text-xs">
                   <thead>
-                    <tr className="bg-zinc-100 font-black text-center text-zinc-800 border-b border-zinc-300">
+                    <tr className="bg-zinc-100 font-bold text-center text-black border-b border-zinc-300">
                       <th className="p-2 border border-zinc-300 urdu-text">تاریخ</th>
                       <th className="p-2 border border-zinc-300 urdu-text">تفصیل اشیاء</th>
                       <th className="p-2 border border-zinc-300 urdu-text">پکائی</th>
@@ -1161,21 +1207,18 @@ export default function Khaata({ lang }: KhaataProps) {
                     </tr>
                   </thead>
                   <tbody>
-                    {pageEntries.map((e) => {
-                      const isGive = e.type === 'give';
-                      return (
-                        <tr key={e.id} className="border-b border-zinc-200 text-center hover:bg-zinc-50 transition-colors">
-                          <td className={`p-2 border border-zinc-300 font-bold font-mono ${isGive ? 'text-red-600' : 'text-zinc-600'}`}>{e.date}</td>
-                          <td className={`p-2 border border-zinc-300 urdu-text font-black ${isGive ? 'text-red-700' : 'text-zinc-900'}`}>{e.details}</td>
-                          <td className={`p-2 border border-zinc-300 font-mono font-bold ${isGive ? 'text-red-600' : 'text-orange-700'}`}>{e.pakaye > 0 ? `${parseFloat(e.pakaye.toFixed(2))} R` : '-'}</td>
-                          <td className={`p-2 border border-zinc-300 font-mono font-bold ${isGive ? 'text-red-600' : 'text-zinc-800'}`}>{e.mixWeight > 0 ? `${e.mixWeight.toFixed(2)}g` : '-'}</td>
-                          <td className={`p-2 border border-zinc-300 font-mono font-bold ${isGive ? 'text-red-600' : 'text-zinc-600'}`}>{e.kaatRati > 0 ? `${e.kaatRati} R` : '-'}</td>
-                          <td className={`p-2 border border-zinc-300 font-mono font-black ${isGive ? 'text-red-600' : 'text-emerald-600'}`}>{e.pureWeight > 0 ? `${e.pureWeight.toFixed(2)}g` : '-'}</td>
-                          <td className={`p-2 border border-zinc-300 font-mono font-bold ${isGive ? 'text-red-600' : 'text-gold-dark'}`}>{e.pasaDia > 0 ? `${e.pasaDia.toFixed(2)}g` : '-'}</td>
-                          <td className={`p-2 border border-zinc-300 font-mono font-black ${isGive ? 'text-red-600' : 'text-zinc-950'}`}>{e.runningGold.toFixed(2)}g</td>
-                        </tr>
-                      );
-                    })}
+                    {pageEntries.map((e) => (
+                      <tr key={e.id} className="border-b border-zinc-200 text-center hover:bg-zinc-50 transition-colors">
+                        <td className="p-2 border border-zinc-300 font-bold font-mono text-black">{e.date}</td>
+                        <td className="p-2 border border-zinc-300 urdu-text font-bold text-black">{e.details}</td>
+                        <td className="p-2 border border-zinc-300 font-mono font-bold text-black">{e.pakaye > 0 ? `${parseFloat(e.pakaye.toFixed(2))} R` : '-'}</td>
+                        <td className="p-2 border border-zinc-300 font-mono font-bold text-black">{e.mixWeight > 0 ? `${e.mixWeight.toFixed(2)}g` : '-'}</td>
+                        <td className="p-2 border border-zinc-300 font-mono font-bold text-black">{e.kaatRati > 0 ? `${e.kaatRati} R` : '-'}</td>
+                        <td className="p-2 border border-zinc-300 font-mono font-bold text-black">{e.pureWeight > 0 ? `${e.pureWeight.toFixed(2)}g` : '-'}</td>
+                        <td className="p-2 border border-zinc-300 font-mono font-bold text-black">{e.pasaDia > 0 ? `${e.pasaDia.toFixed(2)}g` : '-'}</td>
+                        <td className="p-2 border border-zinc-300 font-mono font-bold text-black">{e.runningGold.toFixed(2)}g</td>
+                      </tr>
+                    ))}
                     {pageEntries.length === 0 && pageIndex === 0 && (
                       <tr>
                         <td colSpan={8} className="p-8 text-center text-zinc-400 font-bold urdu-text">
@@ -1235,7 +1278,7 @@ export default function Khaata({ lang }: KhaataProps) {
                   }
                   return pages;
                 };
-                const pages = chunkLedger(ledgerWithRunningBalances);
+                const pages = chunkLedger(filteredLedgerEntries);
                 return pages.map((pageEntries, pageIndex) => (
                   <div 
                     key={pageIndex}
@@ -1254,7 +1297,10 @@ export default function Khaata({ lang }: KhaataProps) {
                           <h1 className="text-4xl font-black urdu-text text-gold-dark mb-1">{translations.ur.shopName}</h1>
                           <p className="text-sm font-bold text-zinc-500 font-nastaliq">{translations.ur.shopAddress}</p>
                           <p className="text-xs font-mono mt-1" dir="ltr">{translations.ur.shopPhone}</p>
-                          <div className="inline-block bg-zinc-100 px-4 py-1 rounded-full font-bold urdu-text text-xs border border-zinc-200 mt-3">تفصیلی سونا کھاتہ رپورٹ (Khaata Statement)</div>
+                          <div className="inline-block bg-zinc-100 px-4 py-1 rounded-full font-bold urdu-text text-xs border border-zinc-200 mt-3">
+                            تفصیلی سونا کھاتہ رپورٹ (Khaata Statement)
+                            {itemSearchTerm && ` - فلٹر: ${itemSearchTerm}`}
+                          </div>
                         </div>
                       ) : (
                         <div className="flex justify-between items-center border-b-2 border-gold pb-2 mb-4">
@@ -1270,26 +1316,26 @@ export default function Khaata({ lang }: KhaataProps) {
                         <table className="w-full border-collapse text-right text-xs mb-6">
                           <tbody>
                             <tr className="border-b border-zinc-200">
-                              <th className="p-2 urdu-text font-black text-zinc-500 w-[20%]">نام کھاتہ دار:</th>
-                              <td className="p-2 font-black text-zinc-900 text-sm w-[30%]">{selectedAccount?.name}</td>
-                              <th className="p-2 urdu-text font-black text-zinc-500 w-[20%]">فون نمبر:</th>
-                              <td className="p-2 font-mono font-bold text-zinc-950 w-[30%]">{selectedAccount?.phone || '-'}</td>
+                              <th className="p-2 urdu-text font-bold text-black w-[20%]">نام کھاتہ دار:</th>
+                              <td className="p-2 font-bold text-black text-sm w-[30%]">{selectedAccount?.name}</td>
+                              <th className="p-2 urdu-text font-bold text-black w-[20%]">فون نمبر:</th>
+                              <td className="p-2 font-mono font-bold text-black w-[30%]">{selectedAccount?.phone || '-'}</td>
                             </tr>
                             <tr className="border-b border-zinc-200">
-                              <th className="p-2 urdu-text font-black text-zinc-500">تاریخ پرنٹ:</th>
-                              <td className="p-2 font-mono font-bold text-zinc-750">{formatDate(new Date(), 'ur-PK')}</td>
-                              <th className="p-2 urdu-text font-black text-zinc-500">کُل آئٹم پاسا:</th>
-                              <td className="p-2 font-mono font-bold text-zinc-900">
+                              <th className="p-2 urdu-text font-bold text-black">تاریخ پرنٹ:</th>
+                              <td className="p-2 font-mono font-bold text-black">{formatDate(new Date(), 'ur-PK')}</td>
+                              <th className="p-2 urdu-text font-bold text-black">کُل آئٹم پاسا:</th>
+                              <td className="p-2 font-mono font-bold text-black">
                                 {(accountSummary[selectedAccountId || 0]?.gold || 0).toFixed(2)}g
                               </td>
                             </tr>
                             <tr className="border-b border-zinc-200">
-                              <th className="p-2 urdu-text font-black text-zinc-500">کُل پاسا دیا/ملا:</th>
-                              <td className="p-2 font-mono font-bold text-zinc-900">
+                              <th className="p-2 urdu-text font-bold text-black">کُل پاسا دیا/ملا:</th>
+                              <td className="p-2 font-mono font-bold text-black">
                                 {(accountSummary[selectedAccountId || 0]?.totalPasaDia || 0).toFixed(2)}g
                               </td>
-                              <th className="p-2 urdu-text font-black text-zinc-500">صاف بقایا:</th>
-                              <td className="p-2 font-black text-red-600 text-sm">
+                              <th className="p-2 urdu-text font-bold text-black">صاف بقایا:</th>
+                              <td className="p-2 font-bold text-black text-sm">
                                 {Math.abs(accountSummary[selectedAccountId || 0]?.saafBaqaya || 0).toFixed(2)}g (سونا) {
                                   (accountSummary[selectedAccountId || 0]?.saafBaqaya || 0) > 0.005 ? '(ہمارے ذمہ)' : (accountSummary[selectedAccountId || 0]?.saafBaqaya || 0) < -0.005 ? '(ان کے ذمہ)' : '(حساب صاف)'
                                 }
@@ -1302,7 +1348,7 @@ export default function Khaata({ lang }: KhaataProps) {
                       {/* Ledger table */}
                       <table className="w-full border border-zinc-300 border-collapse text-right text-xs">
                         <thead>
-                          <tr className="bg-zinc-100 font-black text-center text-zinc-800 border-b border-zinc-300">
+                          <tr className="bg-zinc-100 font-bold text-center text-black border-b border-zinc-300">
                             <th className="p-2 border border-zinc-300 urdu-text">تاریخ</th>
                             <th className="p-2 border border-zinc-300 urdu-text">تفصیل اشیاء</th>
                             <th className="p-2 border border-zinc-300 urdu-text">پکائی</th>
@@ -1314,21 +1360,18 @@ export default function Khaata({ lang }: KhaataProps) {
                           </tr>
                         </thead>
                         <tbody>
-                          {pageEntries.map((e) => {
-                            const isGive = e.type === 'give';
-                            return (
-                              <tr key={e.id} className="border-b border-zinc-200 text-center hover:bg-zinc-50 transition-colors">
-                                <td className={`p-2 border border-zinc-300 font-bold font-mono ${isGive ? 'text-red-600' : 'text-zinc-600'}`}>{e.date}</td>
-                                <td className={`p-2 border border-zinc-300 urdu-text font-black ${isGive ? 'text-red-700' : 'text-zinc-900'}`}>{e.details}</td>
-                                <td className={`p-2 border border-zinc-300 font-mono font-bold ${isGive ? 'text-red-600' : 'text-orange-700'}`}>{e.pakaye > 0 ? `${parseFloat(e.pakaye.toFixed(2))} R` : '-'}</td>
-                                <td className={`p-2 border border-zinc-300 font-mono font-bold ${isGive ? 'text-red-600' : 'text-zinc-800'}`}>{e.mixWeight > 0 ? `${e.mixWeight.toFixed(2)}g` : '-'}</td>
-                                <td className={`p-2 border border-zinc-300 font-mono font-bold ${isGive ? 'text-red-600' : 'text-zinc-600'}`}>{e.kaatRati > 0 ? `${e.kaatRati} R` : '-'}</td>
-                                <td className={`p-2 border border-zinc-300 font-mono font-black ${isGive ? 'text-red-600' : 'text-emerald-600'}`}>{e.pureWeight > 0 ? `${e.pureWeight.toFixed(2)}g` : '-'}</td>
-                                <td className={`p-2 border border-zinc-300 font-mono font-bold ${isGive ? 'text-red-600' : 'text-gold-dark'}`}>{e.pasaDia > 0 ? `${e.pasaDia.toFixed(2)}g` : '-'}</td>
-                                <td className={`p-2 border border-zinc-300 font-mono font-black ${isGive ? 'text-red-600' : 'text-zinc-950'}`}>{e.runningGold.toFixed(2)}g</td>
-                              </tr>
-                            );
-                          })}
+                          {pageEntries.map((e) => (
+                            <tr key={e.id} className="border-b border-zinc-200 text-center hover:bg-zinc-50 transition-colors">
+                              <td className="p-2 border border-zinc-300 font-bold font-mono text-black">{e.date}</td>
+                              <td className="p-2 border border-zinc-300 urdu-text font-bold text-black">{e.details}</td>
+                              <td className="p-2 border border-zinc-300 font-mono font-bold text-black">{e.pakaye > 0 ? `${parseFloat(e.pakaye.toFixed(2))} R` : '-'}</td>
+                              <td className="p-2 border border-zinc-300 font-mono font-bold text-black">{e.mixWeight > 0 ? `${e.mixWeight.toFixed(2)}g` : '-'}</td>
+                              <td className="p-2 border border-zinc-300 font-mono font-bold text-black">{e.kaatRati > 0 ? `${e.kaatRati} R` : '-'}</td>
+                              <td className="p-2 border border-zinc-300 font-mono font-bold text-black">{e.pureWeight > 0 ? `${e.pureWeight.toFixed(2)}g` : '-'}</td>
+                              <td className="p-2 border border-zinc-300 font-mono font-bold text-black">{e.pasaDia > 0 ? `${e.pasaDia.toFixed(2)}g` : '-'}</td>
+                              <td className="p-2 border border-zinc-300 font-mono font-bold text-black">{e.runningGold.toFixed(2)}g</td>
+                            </tr>
+                          ))}
                         </tbody>
                       </table>
 

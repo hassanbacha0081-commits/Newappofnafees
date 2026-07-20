@@ -41,7 +41,8 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
     iMazdori: 0,
     oTotalWt: 0,
     oNetWt: 0,
-    recAmt: 0
+    recAmt: 0,
+    discount: 0
   });
 
   const [printData, setPrintData] = useState<{ data: Sale, id: number } | null>(null);
@@ -179,7 +180,8 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
         iMazdori: 0,
         oTotalWt: 0,
         oNetWt: 0,
-        recAmt: editingSale.rec
+        recAmt: editingSale.rec,
+        discount: editingSale.discount || 0
       });
       setBillItems(editingSale.items);
     }
@@ -200,7 +202,8 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
       iMazdori: 0,
       oTotalWt: 0,
       oNetWt: 0,
-      recAmt: 0
+      recAmt: 0,
+      discount: 0
     });
   };
 
@@ -250,7 +253,7 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
   };
 
   const getRemainingAmount = () => {
-    return getGrandTotal() - formData.recAmt;
+    return getGrandTotal() - formData.recAmt - formData.discount;
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -274,7 +277,8 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
       items: [...billItems],
       total: total,
       rec: formData.recAmt,
-      rem: total - formData.recAmt,
+      rem: total - formData.recAmt - formData.discount,
+      discount: formData.discount,
       date: editingSale ? editingSale.date : formatDate(new Date(), 'ur-PK')
     };
 
@@ -840,7 +844,16 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
                   </span>
                 </div>
               </div>
-              <div className="flex justify-between items-center p-6 bg-gold text-black rounded-3xl shadow-xl shadow-gold/20 border-2 border-white/20">
+              <div className="flex justify-between items-center bg-sky-50 p-4 rounded-2xl border border-sky-100 mt-4">
+                <span className="text-zinc-500 font-bold urdu-text">{lang === 'ur' ? 'رعایت / چھوٹ (Discount)' : 'Discount'}</span>
+                <input
+                  type="number"
+                  value={formData.discount || ''}
+                  onChange={e => setFormData({ ...formData, discount: Number(e.target.value) })}
+                  className="w-32 px-4 py-2 bg-white border border-sky-100 rounded-xl text-right font-black text-zinc-900 focus:ring-2 focus:ring-gold outline-none"
+                />
+              </div>
+              <div className="flex justify-between items-center p-6 bg-gold text-black rounded-3xl shadow-xl shadow-gold/20 border-2 border-white/20 mt-4">
                 <span className="font-black urdu-text text-lg uppercase tracking-tight">{t.remainingAmount}</span>
                 <span className="text-3xl font-black text-black tracking-tighter">Rs. {getRemainingAmount().toLocaleString()}</span>
               </div>

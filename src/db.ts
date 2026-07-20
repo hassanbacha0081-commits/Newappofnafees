@@ -18,6 +18,7 @@ export interface Sale {
   total: number;
   rec: number;
   rem: number;
+  discount?: number;
   date: string;
 }
 
@@ -39,6 +40,7 @@ export interface Order {
   total: number;
   payments: OrderPayment[];
   rem: number;
+  discount?: number;
   status: string;
   measurements?: string;
   pricePerTola?: string;

@@ -311,26 +311,34 @@ export default function Stock({ lang }: StockProps) {
         message={lang === 'ur' ? 'کیا آپ واقعی اس آئٹم کو حذف کرنا چاہتے ہیں؟' : 'Are you sure you want to delete this item?'}
         lang={lang}
       />
-      <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-sky-200 shadow-sm gap-4">
-        <div className="relative flex-1 max-w-md">
-          <input 
-            type="text" 
-            className="w-full p-3 pl-10 bg-zinc-50 border border-sky-200 rounded-lg outline-none focus:border-gold text-black shadow-inner"
-            value={searchTerm}
-            placeholder={lang === 'ur' ? 'تلاش کریں...' : 'Search...'}
-            onChange={e => setSearchTerm(e.target.value)}
-          />
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400">
-            {searchTerm ? (
-              <X size={18} className="cursor-pointer hover:text-red-500" onClick={() => setSearchTerm('')} />
-            ) : (
+      <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center bg-white p-4 rounded-xl border border-sky-200 shadow-sm gap-4">
+        <div className="flex flex-wrap items-center gap-3 flex-1 max-w-xl">
+          <div className="relative flex-1 min-w-[200px]">
+            <input 
+              type="text" 
+              className="w-full p-3 pl-10 pr-10 bg-zinc-50 border border-sky-200 rounded-lg outline-none focus:border-gold text-black shadow-inner"
+              value={searchTerm}
+              placeholder={lang === 'ur' ? 'آئٹم تلاش کریں...' : 'Search item...'}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400">
               <Search size={18} />
+            </div>
+            {searchTerm && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400">
+                <X size={18} className="cursor-pointer hover:text-red-500" onClick={() => setSearchTerm('')} />
+              </div>
             )}
           </div>
+          {searchTerm && (
+            <span className="bg-gold/10 text-gold-dark border border-gold/30 px-3 py-1.5 rounded-lg text-xs font-bold font-mono whitespace-nowrap">
+              {lang === 'ur' ? `${stock?.length || 0} آئٹمز ملے` : `${stock?.length || 0} items found`}
+            </span>
+          )}
         </div>
         <button 
           onClick={() => setIsAdding(true)}
-          className="flex items-center gap-2 bg-gold text-black font-bold px-6 py-3 rounded-xl hover:bg-gold-light transition-all shadow-lg shadow-gold-20 whitespace-nowrap"
+          className="flex items-center gap-2 bg-gold text-black font-bold px-6 py-3 rounded-xl hover:bg-gold-light transition-all shadow-lg shadow-gold-20 whitespace-nowrap justify-center"
         >
           <Plus size={20} />
           <span className="urdu-text">{t.add}</span>

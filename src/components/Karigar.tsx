@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type KarigarRecord } from '../db';
 import { translations, type Language } from '../translations';
 import { formatCurrency, formatDate, formatWhatsAppUrl, compressImage } from '../lib/utils';
-import { Plus, Check, Trash2, Camera, RotateCcw, MessageCircle, Printer, Edit, Image as ImageIcon, AlertTriangle, X, Download, AlertCircle, Users } from 'lucide-react';
+import { Plus, Check, Trash2, Camera, RotateCcw, MessageCircle, Printer, Edit, Image as ImageIcon, AlertTriangle, X, Download, AlertCircle, Users, Search } from 'lucide-react';
 import { useReactToPrint } from 'react-to-print';
 import { html2canvasWithOklch as html2canvas } from '../lib/html2canvas-helper';
 import jsPDF from 'jspdf';
@@ -482,14 +482,29 @@ export default function Karigar({ lang }: KarigarProps) {
         </button>
       </div>
 
-      <div className="mb-6">
-        <input 
-          type="text" 
-          placeholder={t.karigarLabels.searchKarigar}
-          className="w-full p-4 bg-white border border-sky-200 rounded-xl outline-none focus:border-gold shadow-sm text-black text-right pr-6"
-          value={searchTerm}
-          onChange={e => setSearchTerm(e.target.value)}
-        />
+      <div className="mb-6 flex flex-col sm:flex-row gap-4 items-stretch sm:items-center bg-white p-4 rounded-xl border border-sky-200 shadow-sm">
+        <div className="relative flex-1">
+          <input 
+            type="text" 
+            className="w-full p-3.5 pl-11 pr-10 bg-zinc-50 border border-sky-200 rounded-xl outline-none focus:border-gold shadow-inner text-black font-semibold text-sm"
+            value={searchTerm}
+            placeholder={lang === 'ur' ? 'نام، موبائل یا کام کی تفصیل سے تلاش کریں...' : 'Search by name, mobile, or task detail...'}
+            onChange={e => setSearchTerm(e.target.value)}
+          />
+          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400">
+            <Search size={18} />
+          </div>
+          {searchTerm && (
+            <div className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400">
+              <X size={18} className="cursor-pointer hover:text-red-500" onClick={() => setSearchTerm('')} />
+            </div>
+          )}
+        </div>
+        {searchTerm && (
+          <span className="bg-gold/10 text-gold-dark border border-gold/30 px-4 py-2 rounded-xl text-xs font-bold font-mono whitespace-nowrap self-center text-center">
+            {lang === 'ur' ? `${karigars?.length || 0} کاریگر ملے` : `${karigars?.length || 0} karigars found`}
+          </span>
+        )}
       </div>
 
       <div className="space-y-4">

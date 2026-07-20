@@ -38,6 +38,7 @@ import Settings from './components/Settings';
 import LockScreen from './components/LockScreen';
 import Expenses from './components/Expenses';
 import Khaata from './components/Khaata';
+import { getPaletteStyles } from './lib/colors';
 
 import { APP_CONFIG } from './config';
 import { 
@@ -62,6 +63,7 @@ export default function App() {
   const [shopAddress, setShopAddress] = useState<string>(translations.ur.shopAddress);
   const [shopPhone, setShopPhone] = useState<string>(translations.ur.shopPhone);
   const [shopPhone2, setShopPhone2] = useState<string>(translations.ur.shopPhone2);
+  const [paletteId, setPaletteId] = useState<string>('royal');
   const [isLoading, setIsLoading] = useState(true);
   
   // Google Drive Onboarding / Restore States
@@ -89,12 +91,14 @@ export default function App() {
       const pin = await db.settings.get('appPin');
       const autoBackupFreq = await db.settings.get('autoBackupFrequency');
       const lastBackupDate = await db.settings.get('lastBackupDate');
+      const paletteSetting = await db.settings.get('colorPalette');
       
       if (rate) setGoldRate(rate.value);
       if (name) setShopName(name.value);
       if (address) setShopAddress(address.value);
       if (phone) setShopPhone(phone.value);
       if (phone2) setShopPhone2(phone2.value);
+      if (paletteSetting) setPaletteId(paletteSetting.value);
       if (pin && pin.value) {
         setAppPin(pin.value);
         setIsLocked(true);
@@ -126,7 +130,7 @@ export default function App() {
             const khaataEntries = await db.khaataEntries.toArray();
 
             const data = { sales, orders, karigars, repairs, stock, settings, goldPurchases, khaataAccounts, khaataEntries };
-            const fileName = `nafees_jewellers_autobackup_${now.toISOString().split('T')[0]}.json`;
+            const fileName = "nafees_jewellers_backup.json";
             const jsonString = JSON.stringify(data);
             
             await db.settings.put({ key: 'lastBackupDate', value: now.toISOString() });
@@ -416,7 +420,7 @@ export default function App() {
       case 'expenses': return <Expenses lang={lang} />;
       case 'khaata': return <Khaata lang={lang} />;
       case 'reports': return <Reports lang={lang} />;
-      case 'settings': return <Settings lang={lang} setGoldRate={setGoldRate} setLang={setLang} />;
+      case 'settings': return <Settings lang={lang} setGoldRate={setGoldRate} setLang={setLang} paletteId={paletteId} setPaletteId={setPaletteId} />;
       default: return <Billing lang={lang} editingSale={editingSale} setEditingSale={setEditingSale} />;
     }
   };
@@ -435,12 +439,15 @@ export default function App() {
 
   if (isLocked && appPin) {
     return (
-      <LockScreen 
-        lang={lang} 
-        correctPin={appPin} 
-        shopName={shopName}
-        onUnlock={() => setIsLocked(false)} 
-      />
+      <>
+        <style dangerouslySetInnerHTML={{ __html: getPaletteStyles(paletteId) }} />
+        <LockScreen 
+          lang={lang} 
+          correctPin={appPin} 
+          shopName={shopName}
+          onUnlock={() => setIsLocked(false)} 
+        />
+      </>
     );
   }
 
@@ -449,6 +456,7 @@ export default function App() {
       "min-h-screen bg-sky-200 text-zinc-900 flex",
       isRTL ? "flex-row-reverse text-right" : "flex-row text-left"
     )} dir={isRTL ? "rtl" : "ltr"}>
+      <style dangerouslySetInnerHTML={{ __html: getPaletteStyles(paletteId) }} />
       {/* Sidebar Desktop */}
       <aside className={cn(
         "hidden lg:flex flex-col w-72 bg-sky-600 text-white h-screen sticky top-0 shadow-2xl z-40",

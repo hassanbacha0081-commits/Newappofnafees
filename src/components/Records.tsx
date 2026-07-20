@@ -354,22 +354,33 @@ export default function Records({ lang, setActiveSection, setEditingSale }: Reco
             <p className="text-zinc-500 text-sm">{lang === 'ur' ? 'تمام ریکارڈز یہاں دیکھیں' : 'View all records here'}</p>
           </div>
           
-          <div className="relative w-full md:w-80">
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder={lang === 'ur' ? 'تلاش کریں...' : 'Search...'}
-              className="w-full pl-10 pr-10 py-2 bg-white border border-sky-200 rounded-lg focus:ring-2 focus:ring-gold outline-none transition-all text-black shadow-sm"
-            />
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
+          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+            <div className="relative w-full md:w-80">
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder={lang === 'ur' ? 'نام، فون یا آئٹم تلاش کریں...' : 'Search by name, phone, or item...'}
+                className="w-full pl-10 pr-10 py-2.5 bg-zinc-50 border border-sky-200 rounded-xl outline-none focus:border-gold transition-all text-black font-semibold text-sm shadow-inner"
+              />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
+              {searchTerm && (
+                <button 
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-red-500 transition-colors cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              )}
+            </div>
             {searchTerm && (
-              <button 
-                onClick={() => setSearchTerm('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-red-500 transition-colors"
-              >
-                <X size={18} />
-              </button>
+              <span className="bg-gold/10 text-gold-dark border border-gold/30 px-3 py-1.5 rounded-lg text-xs font-bold font-mono whitespace-nowrap">
+                {activeTab === 'sales' ? (
+                  lang === 'ur' ? `${sales?.length || 0} سیلز ریکارڈز ملے` : `${sales?.length || 0} sales records found`
+                ) : (
+                  lang === 'ur' ? `${purchases?.length || 0} خریداری ریکارڈز ملے` : `${purchases?.length || 0} purchase records found`
+                )}
+              </span>
             )}
           </div>
         </div>

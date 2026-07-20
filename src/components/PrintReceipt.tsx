@@ -405,6 +405,12 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
                   <th className="font-nastaliq">وصول شدہ رقم</th>
                   <td className="font-mono">{sale.rec.toLocaleString()}</td>
                 </tr>
+                {sale.discount ? (
+                  <tr className="text-red-600">
+                    <th className="font-nastaliq">چھوٹ / رعایت</th>
+                    <td className="font-mono">{sale.discount.toLocaleString()}</td>
+                  </tr>
+                ) : null}
                 <tr className="final-total-row">
                   <th className="font-nastaliq font-black">صاف بقایا</th>
                   <td className="font-black font-mono">{sale.rem.toLocaleString()}</td>
@@ -655,8 +661,14 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
                 </tr>
                 <tr>
                   <td className="font-nastaliq" style={{ padding: '6px' }}>ایڈوانس</td>
-                  <td className="font-mono" style={{ padding: '6px' }}>{(order.total - order.rem)?.toLocaleString() || '-'}</td>
+                  <td className="font-mono" style={{ padding: '6px' }}>{(order.total - order.rem - (order.discount || 0))?.toLocaleString() || '-'}</td>
                 </tr>
+                {order.discount ? (
+                  <tr>
+                    <td className="font-nastaliq text-red-600" style={{ padding: '6px' }}>چھوٹ / رعایت</td>
+                    <td className="font-mono text-red-600" style={{ padding: '6px' }}>{order.discount.toLocaleString()}</td>
+                  </tr>
+                ) : null}
                 <tr>
                   <td className="font-nastaliq font-bold" style={{ padding: '6px', background: '#f8f9fa' }}>بقایا</td>
                   <td className="font-mono font-bold" style={{ padding: '6px', background: '#f8f9fa' }}>{order.rem?.toLocaleString() || '-'}</td>

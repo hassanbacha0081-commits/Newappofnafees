@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Check, ChevronDown, X, Plus, Search } from 'lucide-react';
 
 interface MultiSelectInputProps {
@@ -13,6 +13,39 @@ export function MultiSelectInput({ options, value, onChange, lang, placeholder }
   const [isOpen, setIsOpen] = useState(false);
   const [customValue, setCustomValue] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Load custom items from local storage
+  const [customItems, setCustomItems] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem(`custom_items_${lang}`);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Keep custom items in sync when language changes
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(`custom_items_${lang}`);
+      setCustomItems(stored ? JSON.parse(stored) : []);
+    } catch {
+      setCustomItems([]);
+    }
+  }, [lang]);
+
+  // Merge static options and custom items uniquely
+  const mergedOptions = useMemo(() => {
+    const combined = [...options, ...customItems];
+    const seen = new Set<string>();
+    return combined.filter(opt => {
+      const lower = opt.toLowerCase().trim();
+      if (!lower) return false;
+      if (seen.has(lower)) return false;
+      seen.add(lower);
+      return true;
+    });
+  }, [options, customItems]);
 
   const selectedItems = value ? value.split(', ').filter(Boolean) : [];
 
@@ -31,12 +64,29 @@ export function MultiSelectInput({ options, value, onChange, lang, placeholder }
 
   const addCustom = () => {
     const trimmed = customValue.trim();
-    if (trimmed && !selectedItems.some(item => item.toLowerCase() === trimmed.toLowerCase())) {
+    if (!trimmed) return;
+
+    // Check if it already exists in the merged dropdown list
+    const existsInMerged = mergedOptions.some(o => o.toLowerCase() === trimmed.toLowerCase());
+    
+    if (!existsInMerged) {
+      const updated = [...customItems, trimmed];
+      setCustomItems(updated);
+      try {
+        localStorage.setItem(`custom_items_${lang}`, JSON.stringify(updated));
+      } catch (err) {
+        console.error('Error saving custom item:', err);
+      }
+    }
+
+    // Toggle select if not already selected
+    if (!selectedItems.some(item => item.toLowerCase() === trimmed.toLowerCase())) {
       const newItems = [...selectedItems, trimmed];
       onChange(newItems.join(', '));
-      setCustomValue('');
-      setIsOpen(false);
     }
+
+    setCustomValue('');
+    setIsOpen(false);
   };
 
   useEffect(() => {
@@ -50,12 +100,12 @@ export function MultiSelectInput({ options, value, onChange, lang, placeholder }
   }, []);
 
   // Filter options based on customValue query
-  const filteredOptions = options.filter(option =>
+  const filteredOptions = mergedOptions.filter(option =>
     option.toLowerCase().includes(customValue.toLowerCase())
   );
 
   const showAddCustomOption = customValue.trim() && 
-    !options.some(o => o.toLowerCase() === customValue.trim().toLowerCase()) &&
+    !mergedOptions.some(o => o.toLowerCase() === customValue.trim().toLowerCase()) &&
     !selectedItems.some(i => i.toLowerCase() === customValue.trim().toLowerCase());
 
   const defaultPlaceholder = lang === 'ur' ? 'آئٹم منتخب کریں...' : 'Select items...';

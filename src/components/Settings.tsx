@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../db';
 import { translations, type Language } from '../translations';
 import { APP_CONFIG } from '../config';
+import { COLOR_PALETTES, type ColorPalette } from '../lib/colors';
 import { Save, Download, Upload, Languages, Trash2, AlertTriangle, BadgeDollarSign, History, ShoppingBag, Cloud, CloudOff, RefreshCw } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { SecurityModal } from './SecurityModal';
@@ -21,9 +22,11 @@ interface SettingsProps {
   lang: Language;
   setGoldRate: (rate: number) => void;
   setLang: (lang: Language) => void;
+  paletteId: string;
+  setPaletteId: (id: string) => void;
 }
 
-export default function Settings({ lang, setGoldRate, setLang }: SettingsProps) {
+export default function Settings({ lang, setGoldRate, setLang, paletteId, setPaletteId }: SettingsProps) {
   const t = translations[lang];
   const [rateInput, setRateInput] = useState<string>('');
   const [shopNameInput, setShopNameInput] = useState<string>('');
@@ -365,7 +368,7 @@ export default function Settings({ lang, setGoldRate, setLang }: SettingsProps) 
       const khaataEntries = db.khaataEntries ? await db.khaataEntries.toArray() : [];
 
       const data = { sales, orders, karigars, repairs, stock, settings, goldPurchases, khaataAccounts, khaataEntries };
-      const fileName = `nafees_jewellers_backup_${new Date().toISOString().split('T')[0]}.json`;
+      const fileName = "nafees_jewellers_backup.json";
       const jsonString = JSON.stringify(data);
 
       await db.settings.put({ key: 'lastBackupDate', value: new Date().toISOString() });
@@ -531,6 +534,52 @@ export default function Settings({ lang, setGoldRate, setLang }: SettingsProps) 
                 <span className="font-bold">English</span>
                 {lang === 'en' && <div className="w-2 h-2 bg-black rounded-full" />}
               </button>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-sky-200 space-y-4">
+            <h3 className="text-sm font-bold text-zinc-500 uppercase urdu-text">
+              {lang === 'ur' ? 'رنگوں کی تھیم' : 'Color Theme'}
+            </h3>
+            <p className="text-[11px] text-zinc-400 leading-relaxed">
+              {lang === 'ur' ? 'ایپلی کیشن کا رنگ اور تھیم تبدیل کریں' : 'Change the colors and theme of the application'}
+            </p>
+            <div className="space-y-2">
+              {COLOR_PALETTES.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={async () => {
+                    await db.settings.put({ key: 'colorPalette', value: p.id });
+                    setPaletteId(p.id);
+                  }}
+                  className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all ${
+                    paletteId === p.id 
+                      ? 'bg-sky-50 border-sky-400 shadow-sm' 
+                      : 'bg-zinc-50 border-zinc-200 hover:bg-zinc-100'
+                  }`}
+                >
+                  <div className="flex flex-col text-start items-start">
+                    <span className="font-bold text-sm text-zinc-800">
+                      {lang === 'ur' ? p.nameUr : p.nameEn}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div 
+                      className="w-4 h-4 rounded-full border border-black/10 shadow-sm" 
+                      style={{ backgroundColor: p.sky[500] }} 
+                      title="Primary"
+                    />
+                    <div 
+                      className="w-4 h-4 rounded-full border border-black/10 shadow-sm" 
+                      style={{ backgroundColor: p.gold.base }} 
+                      title="Accent"
+                    />
+                    {paletteId === p.id && (
+                      <div className="w-1.5 h-1.5 bg-sky-600 rounded-full ml-1" />
+                    )}
+                  </div>
+                </button>
+              ))}
             </div>
           </div>
         </div>
