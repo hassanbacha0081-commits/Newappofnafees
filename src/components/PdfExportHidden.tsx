@@ -3,6 +3,9 @@ import jsPDF from 'jspdf';
 import { html2canvasWithOklch as html2canvas } from '../lib/html2canvas-helper';
 import { db } from '../db';
 import { translations } from '../translations';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 
 const WHATSAPP_ICON = "data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22448%22%20height%3D%22512%22%20viewBox%3D%220%200%20448%20512%22%3E%3Cpath%20fill%3D%22%2325D366%22%20d%3D%22M380.9%2097.1C339%2055.1%20283.2%2032%20223.9%2032c-122.4%200-222%2099.6-222%20222%200%2039.1%2010.2%2077.3%2029.6%20111L0%20480l117.7-30.9c32.4%2017.7%2068.9%2027%20106.1%2027h.1c122.3%200%20224.1-99.6%20224.1-222%200-59.3-25.2-115-67.1-157zm-157%20341.6c-33.1%200-65.6-8.9-94-25.7l-6.7-4-69.8%2018.3L72%20359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2%200-101.7%2082.8-184.5%20184.6-184.5%2049.3%200%2095.6%2019.2%20130.4%2054.1%2034.8%2034.9%2056.2%2081.2%2056.1%20130.5%200%20101.8-84.9%20184.6-186.6%20184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5%202.8-3.7%205.6-14.3%2018-17.6%2021.8-3.2%203.7-6.5%204.2-12%201.4-5.5-2.8-23.4-8.6-44.6-27.6-16.5-14.7-27.6-32.8-30.8-38.4-3.2-5.6-.3-8.6%202.5-11.4%202.5-2.5%205.5-6.5%208.3-9.7%202.8-3.2%203.7-5.5%205.6-9.2%201.9-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7%200-9.7%201.4-14.8%206.9-5.1%205.6-19.4%2019-19.4%2046.3%200%2027.3%2019.9%2053.7%2022.6%2057.4%202.8%203.7%2039.1%2059.7%2094.8%2083.8%2013.3%205.7%2023.7%209.1%2031.7%2011.7%2013.3%204.2%2025.5%203.6%2035.1%202.2%2010.7-1.6%2032.8-13.4%2037.4-26.4%204.6-13%204.6-24.1%203.2-26.4-1.3-2.5-5-3.9-10.5-6.6z%22%20%2F%3E%3C%2Fsvg%3E";
 
@@ -49,15 +52,15 @@ const PdfExportHidden = forwardRef<PdfExportRef, {}>((props, ref) => {
       setSectionsData({ sections, title });
       setIsGenerating(true);
       
-      // Wait for React to render the hidden elements (using a slightly longer delay for large data)
-      await new Promise(r => setTimeout(r, 600));
+      // Wait for React to render the hidden DOM elements
+      await new Promise(r => setTimeout(r, 800));
 
       try {
         const container = document.getElementById('pdf-export-container');
-        if (!container) throw new Error("Container not found");
+        if (!container) throw new Error("PDF export container element not found");
         
         const pageElements = container.querySelectorAll('.pdf-page');
-        if (pageElements.length === 0) throw new Error("No pages generated");
+        if (pageElements.length === 0) throw new Error("No PDF pages generated");
 
         const pdf = new jsPDF({
           orientation: 'portrait',
@@ -73,7 +76,7 @@ const PdfExportHidden = forwardRef<PdfExportRef, {}>((props, ref) => {
           const canvas = await html2canvas(pageEl, {
             scale: 2,
             useCORS: true,
-            logging: true,
+            logging: false,
             backgroundColor: '#ffffff',
             windowWidth: 800,
             windowHeight: 1130
@@ -84,9 +87,26 @@ const PdfExportHidden = forwardRef<PdfExportRef, {}>((props, ref) => {
           pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfPageHeight);
         }
         
-        pdf.save(filename);
+        if (Capacitor.isNativePlatform()) {
+          const pdfBase64 = pdf.output('datauristring').split(',')[1];
+          const savedFile = await Filesystem.writeFile({
+            path: filename,
+            data: pdfBase64,
+            directory: Directory.Cache
+          });
+
+          await Share.share({
+            title: title || 'All Data Export',
+            url: savedFile.uri,
+            dialogTitle: 'Save or Share PDF'
+          });
+        } else {
+          pdf.save(filename);
+        }
       } catch (err) {
         console.error("PDF Export Error:", err);
+        alert(translations.ur ? "پی ڈی ایف فائل محفوظ کرنے میں خرابی پیش آئی" : "Error saving PDF file");
+        throw err;
       } finally {
         setIsGenerating(false);
         setSectionsData(null);
@@ -303,7 +323,20 @@ const PdfExportHidden = forwardRef<PdfExportRef, {}>((props, ref) => {
   });
 
   return (
-    <div style={{ position: 'absolute', top: 0, left: 0, zIndex: -9999, pointerEvents: 'none', width: '800px', height: 'auto', opacity: 0.01 }} id="pdf-export-container">
+    <div 
+      style={{ 
+        position: 'fixed', 
+        top: 0, 
+        left: '-9999px', 
+        zIndex: -9999, 
+        pointerEvents: 'none', 
+        width: '800px', 
+        height: 'auto', 
+        opacity: 1, 
+        backgroundColor: '#ffffff' 
+      }} 
+      id="pdf-export-container"
+    >
       {pages}
     </div>
   );

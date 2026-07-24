@@ -320,117 +320,120 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
     );
   };
 
-  const handleExportPDF = async (type: 'sales' | 'purchases' | 'all') => {
+  const handleExportPDF = async (type: 'sales' | 'purchases' | 'all' = 'all') => {
     try {
       if (!pdfRef.current) return;
       setIsExportingPdf(true);
       
       const sections: PdfSection[] = [];
-      let filename = `Export_${new Date().toISOString().split('T')[0]}.pdf`;
-      let title = lang === 'ur' ? "ایپ کا مکمل ڈیٹا" : "Data Export";
+      const filename = `All_Data_Export_${new Date().toISOString().split('T')[0]}.pdf`;
+      const title = lang === 'ur' ? "تمام ایپ کا ڈیٹا" : "All App Data Report";
 
-      if (type === 'sales' || type === 'all') {
-        const sales = await db.sales.toArray();
-        sections.push({
-          heading: lang === 'ur' ? "سیلز ریکارڈ" : "Sales Records",
-          columns: lang === 'ur' ? ['رسید نمبر', 'تاریخ', 'گاہک کا نام', 'فون نمبر', 'کل رقم', 'وصول شدہ', 'بکایا', 'آئٹمز'] : ['Invoice #', 'Date', 'Customer Name', 'Phone', 'Total', 'Received', 'Remaining', 'Items'],
-          data: sales.map(s => [
-            s.id?.toString() || '', 
-            s.date || '', 
-            s.name || '', 
-            s.phone || '', 
-            s.total?.toLocaleString() || '0', 
-            s.rec?.toLocaleString() || '0', 
-            s.rem?.toLocaleString() || '0', 
-            s.items?.map(i => `${i.n}(${i.w}g)`).join(' | ') || ''
-          ])
-        });
-        if (type === 'sales') {
-          filename = `Sales_Export_${new Date().toISOString().split('T')[0]}.pdf`;
-          title = lang === 'ur' ? "سیلز رپورٹ" : "Sales Report";
+      // 1. Sales
+      const sales = await db.sales.toArray();
+      sections.push({
+        heading: lang === 'ur' ? "سیلز ریکارڈ" : "Sales Records",
+        columns: lang === 'ur' ? ['رسید نمبر', 'تاریخ', 'گاہک کا نام', 'فون نمبر', 'کل رقم', 'وصول شدہ', 'بکایا', 'آئٹمز'] : ['Invoice #', 'Date', 'Customer Name', 'Phone', 'Total', 'Received', 'Remaining', 'Items'],
+        data: sales.map(s => [
+          s.id?.toString() || '', 
+          s.date || '', 
+          s.name || '', 
+          s.phone || '', 
+          s.total?.toLocaleString() || '0', 
+          s.rec?.toLocaleString() || '0', 
+          s.rem?.toLocaleString() || '0', 
+          s.items?.map(i => `${i.n}(${i.w}g)`).join(' | ') || ''
+        ])
+      });
+
+      // 2. Purchases
+      const purchases = await db.goldPurchases.toArray();
+      sections.push({
+        heading: lang === 'ur' ? "خریداری ریکارڈ" : "Purchases Records",
+        columns: lang === 'ur' ? ['تاریخ', 'فروخت کنندہ کا نام', 'فون نمبر', 'وزن (گرام)', 'ریٹ', 'کل رقم'] : ['Date', 'Seller Name', 'Phone', 'Weight(g)', 'Rate', 'Total'],
+        data: purchases.map(p => [
+          p.date || '', 
+          p.name || '', 
+          p.phone || '', 
+          p.weight?.toString() || '0', 
+          p.rate?.toLocaleString() || '0', 
+          p.total?.toLocaleString() || '0'
+        ])
+      });
+
+      // 3. Orders
+      const orders = await db.orders.toArray();
+      sections.push({
+        heading: lang === 'ur' ? "آرڈرز" : "Orders",
+        columns: lang === 'ur' ? ['تاریخ', 'واپسی کی تاریخ', 'گاہک کا نام', 'فون نمبر', 'کل رقم', 'سٹیٹس'] : ['Date', 'Due Date', 'Customer', 'Phone', 'Total', 'Status'],
+        data: orders.map(o => [
+          o.date || '', o.due || '', o.name || '', o.phone || '', o.total?.toLocaleString() || '0', 
+          lang === 'ur' ? (o.status === 'completed' ? 'مکمل' : o.status === 'cancelled' ? 'منسوخ' : 'زیر التواء') : o.status || ''
+        ])
+      });
+
+      // 4. Khaata Entries
+      const khaataEntries = await db.khaataEntries.toArray();
+      sections.push({
+        heading: lang === 'ur' ? "کھاتہ تفصیلات" : "Khaata Entries",
+        columns: lang === 'ur' ? ['تاریخ', 'کھاتہ ID', 'قسم', 'خالص وزن', 'پاسہ دیا', 'تفصیل'] : ['Date', 'Account ID', 'Type', 'Pure Wt', 'Pasa Gold', 'Details'],
+        data: khaataEntries.map(k => [
+          k.date || '', k.accountId?.toString() || '', 
+          lang === 'ur' ? (k.type === 'give' ? 'بنام (دیا)' : 'جمع (وصول)') : k.type || '', 
+          k.pureWeight?.toString() || '-', k.pasaDia?.toString() || '-', k.details || ''
+        ])
+      });
+
+      // 5. Karigar
+      const karigars = await db.karigars.toArray();
+      sections.push({
+        heading: lang === 'ur' ? "کاریگر کھاتہ" : "Karigar",
+        columns: lang === 'ur' ? ['نام', 'کام', 'دیا (گرام)', 'وصول (گرام)', 'نیٹ (گرام)'] : ['Name', 'Task', 'Given(g)', 'Received(g)', 'Net(g)'],
+        data: karigars.map(k => [
+          k.name || '', k.task || '', k.given?.toString() || '0', k.rec?.toString() || '0', k.net?.toString() || '0'
+        ])
+      });
+
+      // 6. Repairs
+      const repairs = await db.repairs.toArray();
+      sections.push({
+        heading: lang === 'ur' ? "مرمت" : "Repairs",
+        columns: lang === 'ur' ? ['گاہک کا نام', 'فون نمبر', 'آئٹم', 'مسئلہ', 'قیمت', 'سٹیٹس'] : ['Customer', 'Phone', 'Item', 'Issue', 'Cost', 'Status'],
+        data: repairs.map(r => [
+          r.customerName || '', r.customerPhone || '', r.item || '', r.issue || '', r.charges?.toLocaleString() || '0', 
+          lang === 'ur' ? (r.status === 'Done' ? 'مکمل' : 'زیر التواء') : r.status || ''
+        ])
+      });
+
+      // 7. Stock
+      const stock = await db.stock.toArray();
+      sections.push({
+        heading: lang === 'ur' ? "اسٹاک" : "Stock",
+        columns: lang === 'ur' ? ['آئٹم کا نام', 'قسم', 'مقدار', 'یونٹ', 'پیسز'] : ['Item Name', 'Type', 'Quantity', 'Unit', 'Pieces'],
+        data: stock.map(s => [
+          s.name || '', lang === 'ur' ? (s.type === 'Gold' ? 'سونا' : 'آئٹم') : s.type || '', 
+          s.quantity?.toString() || '0', s.unit || '', s.pieces?.toString() || '0'
+        ])
+      });
+
+      // 8. Expenses (if available)
+      if (db.expenses) {
+        const expenses = await db.expenses.toArray();
+        if (expenses.length > 0) {
+          sections.push({
+            heading: lang === 'ur' ? "اخراجات" : "Expenses",
+            columns: lang === 'ur' ? ['تاریخ', 'کیٹیگری', 'تفصیل', 'رقم'] : ['Date', 'Category', 'Description', 'Amount'],
+            data: expenses.map(e => [
+              e.date || '', e.category || '', e.description || '', e.amount?.toLocaleString() || '0'
+            ])
+          });
         }
-      } 
-      
-      if (type === 'purchases' || type === 'all') {
-        const purchases = await db.goldPurchases.toArray();
-        sections.push({
-          heading: lang === 'ur' ? "خریداری ریکارڈ" : "Purchases Records",
-          columns: lang === 'ur' ? ['تاریخ', 'فروخت کنندہ کا نام', 'فون نمبر', 'وزن (گرام)', 'ریٹ', 'کل رقم'] : ['Date', 'Seller Name', 'Phone', 'Weight(g)', 'Rate', 'Total'],
-          data: purchases.map(p => [
-            p.date || '', 
-            p.name || '', 
-            p.phone || '', 
-            p.weight?.toString() || '0', 
-            p.rate?.toLocaleString() || '0', 
-            p.total?.toLocaleString() || '0'
-          ])
-        });
-        if (type === 'purchases') {
-          filename = `Purchases_Export_${new Date().toISOString().split('T')[0]}.pdf`;
-          title = lang === 'ur' ? "خریداری رپورٹ" : "Purchases Report";
-        }
-      }
-
-      if (type === 'all') {
-        filename = `All_Data_Export_${new Date().toISOString().split('T')[0]}.pdf`;
-        title = lang === 'ur' ? "تمام ایپ کا ڈیٹا" : "All App Data Report";
-
-        const orders = await db.orders.toArray();
-        sections.push({
-          heading: lang === 'ur' ? "آرڈرز" : "Orders",
-          columns: lang === 'ur' ? ['تاریخ', 'واپسی کی تاریخ', 'گاہک کا نام', 'فون نمبر', 'کل رقم', 'سٹیٹس'] : ['Date', 'Due Date', 'Customer', 'Phone', 'Total', 'Status'],
-          data: orders.map(o => [
-            o.date || '', o.due || '', o.name || '', o.phone || '', o.total?.toLocaleString() || '0', 
-            lang === 'ur' ? (o.status === 'completed' ? 'مکمل' : o.status === 'cancelled' ? 'منسوخ' : 'زیر التواء') : o.status || ''
-          ])
-        });
-
-        const khaataEntries = await db.khaataEntries.toArray();
-        sections.push({
-          heading: lang === 'ur' ? "کھاتہ تفصیلات" : "Khaata Entries",
-          columns: lang === 'ur' ? ['تاریخ', 'کھاتہ ID', 'قسم', 'خالص وزن', 'پاسہ دیا', 'تفصیل'] : ['Date', 'Account ID', 'Type', 'Pure Wt', 'Pasa Gold', 'Details'],
-          data: khaataEntries.map(k => [
-            k.date || '', k.accountId?.toString() || '', 
-            lang === 'ur' ? (k.type === 'give' ? 'بنام (دیا)' : 'جمع (وصول)') : k.type || '', 
-            k.pureWeight?.toString() || '-', k.pasaDia?.toString() || '-', k.details || ''
-          ])
-        });
-
-        const karigars = await db.karigars.toArray();
-        sections.push({
-          heading: lang === 'ur' ? "کاریگر کھاتہ" : "Karigar",
-          columns: lang === 'ur' ? ['نام', 'کام', 'دیا (گرام)', 'وصول (گرام)', 'نیٹ (گرام)'] : ['Name', 'Task', 'Given(g)', 'Received(g)', 'Net(g)'],
-          data: karigars.map(k => [
-            k.name || '', k.task || '', k.given?.toString() || '0', k.rec?.toString() || '0', k.net?.toString() || '0'
-          ])
-        });
-
-        const repairs = await db.repairs.toArray();
-        sections.push({
-          heading: lang === 'ur' ? "مرمت" : "Repairs",
-          columns: lang === 'ur' ? ['گاہک کا نام', 'فون نمبر', 'آئٹم', 'مسئلہ', 'قیمت', 'سٹیٹس'] : ['Customer', 'Phone', 'Item', 'Issue', 'Cost', 'Status'],
-          data: repairs.map(r => [
-            r.customerName || '', r.customerPhone || '', r.item || '', r.issue || '', r.charges?.toLocaleString() || '0', 
-            lang === 'ur' ? (r.status === 'Done' ? 'مکمل' : 'زیر التواء') : r.status || ''
-          ])
-        });
-
-        const stock = await db.stock.toArray();
-        sections.push({
-          heading: lang === 'ur' ? "اسٹاک" : "Stock",
-          columns: lang === 'ur' ? ['آئٹم کا نام', 'قسم', 'مقدار', 'یونٹ', 'پیسز'] : ['Item Name', 'Type', 'Quantity', 'Unit', 'Pieces'],
-          data: stock.map(s => [
-            s.name || '', lang === 'ur' ? (s.type === 'Gold' ? 'سونا' : 'آئٹم') : s.type || '', 
-            s.quantity?.toString() || '0', s.unit || '', s.pieces?.toString() || '0'
-          ])
-        });
       }
 
       await pdfRef.current.generatePDF(sections, filename, title);
 
     } catch (err) {
       console.error('Export failed:', err);
-      alert('Export failed');
     } finally {
       setIsExportingPdf(false);
     }
@@ -974,42 +977,26 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
               </label>
             </div>
 
-            {/* Excel Export Section */}
+            {/* PDF Export Section */}
             <div className="pt-8 border-t border-sky-100 space-y-4">
               <div className="flex items-center gap-2 text-sky-900 font-bold urdu-text">
-                <BadgeDollarSign className="text-emerald-500" />
-                {lang === 'ur' ? 'ایکسل رپورٹنگ (Excel Sheets)' : 'Excel Reporting'}
+                <Download className="text-indigo-600" />
+                {lang === 'ur' ? 'پی ڈی ایف رپورٹنگ (PDF Report)' : 'PDF Reporting'}
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <button 
-                  onClick={() => handleExportPDF('sales')}
-                  disabled={isExportingPdf}
-                  className="flex items-center gap-3 p-4 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-2xl hover:bg-emerald-100 transition-all font-bold group disabled:opacity-50"
-                >
-                  <div className="p-2 bg-white rounded-lg shadow-sm group-hover:scale-110 transition-transform">
-                    <History size={20} />
-                  </div>
-                  <span className="urdu-text text-sm">{isExportingPdf ? (lang === 'ur' ? 'محفوظ ہو رہا ہے...' : 'Generating...') : (t.exportSalesPdf || "Export Sales to PDF")}</span>
-                </button>
-                <button 
-                  onClick={() => handleExportPDF('purchases')}
-                  disabled={isExportingPdf}
-                  className="flex items-center gap-3 p-4 bg-amber-50 text-amber-700 border border-amber-100 rounded-2xl hover:bg-amber-100 transition-all font-bold group disabled:opacity-50"
-                >
-                  <div className="p-2 bg-white rounded-lg shadow-sm group-hover:scale-110 transition-transform">
-                    <ShoppingBag size={20} />
-                  </div>
-                  <span className="urdu-text text-sm">{isExportingPdf ? (lang === 'ur' ? 'محفوظ ہو رہا ہے...' : 'Generating...') : (t.exportPurchasesPdf || "Export Purchases to PDF")}</span>
-                </button>
+              <div>
                 <button 
                   onClick={() => handleExportPDF('all')}
                   disabled={isExportingPdf}
-                  className="col-span-1 sm:col-span-2 flex items-center justify-center gap-3 p-4 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-2xl hover:bg-indigo-100 transition-all font-bold group disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-3 p-4 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 transition-all font-bold shadow-md hover:shadow-lg active:scale-[0.99] disabled:opacity-50"
                 >
-                  <div className="p-2 bg-white rounded-lg shadow-sm group-hover:scale-110 transition-transform">
-                    <Download size={20} />
+                  <div className="p-2 bg-white/20 rounded-lg group-hover:scale-110 transition-transform">
+                    <Download size={22} />
                   </div>
-                  <span className="urdu-text text-sm">{isExportingPdf ? (lang === 'ur' ? 'تمام ڈیٹا پی ڈی ایف میں محفوظ ہو رہا ہے...' : 'Generating Complete PDF Report...') : (t.exportAllDataPdf || "Export All Data to PDF")}</span>
+                  <span className="urdu-text text-base">
+                    {isExportingPdf 
+                      ? (lang === 'ur' ? 'تمام ڈیٹا پی ڈی ایف میں محفوظ ہو رہا ہے...' : 'Generating Complete PDF Report...') 
+                      : (t.exportAllDataPdf || "Export All Data to PDF")}
+                  </span>
                 </button>
               </div>
             </div>
