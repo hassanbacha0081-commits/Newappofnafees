@@ -9,6 +9,7 @@ import { SecurityModal } from './SecurityModal';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
+import PdfExportHidden, { PdfExportRef, PdfSection } from './PdfExportHidden';
 import { 
   addAuthListener, 
   googleSignIn, 
@@ -28,6 +29,7 @@ interface SettingsProps {
 
 export default function Settings({ lang, setGoldRate, setLang, paletteId, setPaletteId }: SettingsProps) {
   const t = translations[lang];
+  const pdfRef = React.useRef<PdfExportRef>(null);
   const [rateInput, setRateInput] = useState<string>('');
   const [shopNameInput, setShopNameInput] = useState<string>('');
   const [shopAddressInput, setShopAddressInput] = useState<string>('');
@@ -43,6 +45,7 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
   const [gUser, setGUser] = useState<any>(null);
   const [gToken, setGToken] = useState<string | null>(null);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [lastDriveBackup, setLastDriveBackup] = useState<string | null>(null);
   const [driveStatusMessage, setDriveStatusMessage] = useState<string>('');
 
@@ -317,41 +320,119 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
     );
   };
 
-  const handleExportCSV = async (type: 'sales' | 'purchases') => {
+  const handleExportPDF = async (type: 'sales' | 'purchases' | 'all') => {
     try {
-      let data: any[] = [];
-      let filename = '';
-      let headers = '';
+      if (!pdfRef.current) return;
+      setIsExportingPdf(true);
+      
+      const sections: PdfSection[] = [];
+      let filename = `Export_${new Date().toISOString().split('T')[0]}.pdf`;
+      let title = lang === 'ur' ? "ایپ کا مکمل ڈیٹا" : "Data Export";
 
-      if (type === 'sales') {
+      if (type === 'sales' || type === 'all') {
         const sales = await db.sales.toArray();
-        filename = `Sales_Export_${new Date().toISOString().split('T')[0]}.csv`;
-        headers = 'Invoice #,Date,Customer Name,Phone,Total,Received,Remaining,Items\n';
-        data = sales.map(s => {
-          const itemsStr = s.items.map(i => `${i.n}(${i.w}g)`).join(' | ');
-          return `${s.id},"${s.date}","${s.name}","${s.phone}",${s.total},${s.rec},${s.rem},"${itemsStr}"`;
+        sections.push({
+          heading: lang === 'ur' ? "سیلز ریکارڈ" : "Sales Records",
+          columns: lang === 'ur' ? ['رسید نمبر', 'تاریخ', 'گاہک کا نام', 'فون نمبر', 'کل رقم', 'وصول شدہ', 'بکایا', 'آئٹمز'] : ['Invoice #', 'Date', 'Customer Name', 'Phone', 'Total', 'Received', 'Remaining', 'Items'],
+          data: sales.map(s => [
+            s.id?.toString() || '', 
+            s.date || '', 
+            s.name || '', 
+            s.phone || '', 
+            s.total?.toLocaleString() || '0', 
+            s.rec?.toLocaleString() || '0', 
+            s.rem?.toLocaleString() || '0', 
+            s.items?.map(i => `${i.n}(${i.w}g)`).join(' | ') || ''
+          ])
         });
-      } else {
+        if (type === 'sales') {
+          filename = `Sales_Export_${new Date().toISOString().split('T')[0]}.pdf`;
+          title = lang === 'ur' ? "سیلز رپورٹ" : "Sales Report";
+        }
+      } 
+      
+      if (type === 'purchases' || type === 'all') {
         const purchases = await db.goldPurchases.toArray();
-        filename = `Purchases_Export_${new Date().toISOString().split('T')[0]}.csv`;
-        headers = 'Date,Seller Name,Phone,Weight(g),Rate,Total\n';
-        data = purchases.map(p => {
-          return `"${p.date}","${p.name}","${p.phone}",${p.weight},${p.rate},${p.total}`;
+        sections.push({
+          heading: lang === 'ur' ? "خریداری ریکارڈ" : "Purchases Records",
+          columns: lang === 'ur' ? ['تاریخ', 'فروخت کنندہ کا نام', 'فون نمبر', 'وزن (گرام)', 'ریٹ', 'کل رقم'] : ['Date', 'Seller Name', 'Phone', 'Weight(g)', 'Rate', 'Total'],
+          data: purchases.map(p => [
+            p.date || '', 
+            p.name || '', 
+            p.phone || '', 
+            p.weight?.toString() || '0', 
+            p.rate?.toLocaleString() || '0', 
+            p.total?.toLocaleString() || '0'
+          ])
+        });
+        if (type === 'purchases') {
+          filename = `Purchases_Export_${new Date().toISOString().split('T')[0]}.pdf`;
+          title = lang === 'ur' ? "خریداری رپورٹ" : "Purchases Report";
+        }
+      }
+
+      if (type === 'all') {
+        filename = `All_Data_Export_${new Date().toISOString().split('T')[0]}.pdf`;
+        title = lang === 'ur' ? "تمام ایپ کا ڈیٹا" : "All App Data Report";
+
+        const orders = await db.orders.toArray();
+        sections.push({
+          heading: lang === 'ur' ? "آرڈرز" : "Orders",
+          columns: lang === 'ur' ? ['تاریخ', 'واپسی کی تاریخ', 'گاہک کا نام', 'فون نمبر', 'کل رقم', 'سٹیٹس'] : ['Date', 'Due Date', 'Customer', 'Phone', 'Total', 'Status'],
+          data: orders.map(o => [
+            o.date || '', o.due || '', o.name || '', o.phone || '', o.total?.toLocaleString() || '0', 
+            lang === 'ur' ? (o.status === 'completed' ? 'مکمل' : o.status === 'cancelled' ? 'منسوخ' : 'زیر التواء') : o.status || ''
+          ])
+        });
+
+        const khaataEntries = await db.khaataEntries.toArray();
+        sections.push({
+          heading: lang === 'ur' ? "کھاتہ تفصیلات" : "Khaata Entries",
+          columns: lang === 'ur' ? ['تاریخ', 'کھاتہ ID', 'قسم', 'سونے کا وزن', 'رقم', 'تفصیل'] : ['Date', 'Account ID', 'Type', 'Gold Wt', 'Amount', 'Details'],
+          data: khaataEntries.map(k => [
+            k.date || '', k.accountId?.toString() || '', 
+            lang === 'ur' ? (k.type === 'give' ? 'بنام (دیا)' : 'جمع (وصول)') : k.type || '', 
+            k.goldWeight?.toString() || '-', k.amount?.toLocaleString() || '-', k.details || ''
+          ])
+        });
+
+        const karigars = await db.karigars.toArray();
+        sections.push({
+          heading: lang === 'ur' ? "کاریگر کھاتہ" : "Karigar",
+          columns: lang === 'ur' ? ['نام', 'کام', 'دیا (گرام)', 'وصول (گرام)', 'مزدوری'] : ['Name', 'Task', 'Given(g)', 'Received(g)', 'Wages'],
+          data: karigars.map(k => [
+            k.name || '', k.task || '', k.given?.toString() || '0', k.received?.toString() || '0', k.wages?.toLocaleString() || '0'
+          ])
+        });
+
+        const repairs = await db.repairs.toArray();
+        sections.push({
+          heading: lang === 'ur' ? "مرمت" : "Repairs",
+          columns: lang === 'ur' ? ['گاہک کا نام', 'فون نمبر', 'آئٹم', 'مسئلہ', 'قیمت', 'سٹیٹس'] : ['Customer', 'Phone', 'Item', 'Issue', 'Cost', 'Status'],
+          data: repairs.map(r => [
+            r.customerName || '', r.customerPhone || '', r.item || '', r.issue || '', r.cost?.toLocaleString() || '0', 
+            lang === 'ur' ? (r.status === 'completed' ? 'مکمل' : 'زیر التواء') : r.status || ''
+          ])
+        });
+
+        const stock = await db.stock.toArray();
+        sections.push({
+          heading: lang === 'ur' ? "اسٹاک" : "Stock",
+          columns: lang === 'ur' ? ['آئٹم کا نام', 'قسم', 'مقدار', 'یونٹ', 'تفصیل'] : ['Item Name', 'Type', 'Quantity', 'Unit', 'Notes'],
+          data: stock.map(s => [
+            s.name || '', lang === 'ur' ? (s.type === 'Gold' ? 'سونا' : 'آئٹم') : s.type || '', 
+            s.quantity?.toString() || '0', s.unit || '', s.notes || ''
+          ])
         });
       }
 
-      const csvContent = headers + data.join('\n');
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', filename);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      await pdfRef.current.generatePDF(sections, filename, title);
+
     } catch (err) {
       console.error('Export failed:', err);
       alert('Export failed');
+    } finally {
+      setIsExportingPdf(false);
     }
   };
 
@@ -901,22 +982,34 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <button 
-                  onClick={() => handleExportCSV('sales')}
-                  className="flex items-center gap-3 p-4 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-2xl hover:bg-emerald-100 transition-all font-bold group"
+                  onClick={() => handleExportPDF('sales')}
+                  disabled={isExportingPdf}
+                  className="flex items-center gap-3 p-4 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-2xl hover:bg-emerald-100 transition-all font-bold group disabled:opacity-50"
                 >
                   <div className="p-2 bg-white rounded-lg shadow-sm group-hover:scale-110 transition-transform">
                     <History size={20} />
                   </div>
-                  <span className="urdu-text text-sm">{t.exportSalesExcel}</span>
+                  <span className="urdu-text text-sm">{isExportingPdf ? (lang === 'ur' ? 'محفوظ ہو رہا ہے...' : 'Generating...') : (t.exportSalesPdf || "Export Sales to PDF")}</span>
                 </button>
                 <button 
-                  onClick={() => handleExportCSV('purchases')}
-                  className="flex items-center gap-3 p-4 bg-amber-50 text-amber-700 border border-amber-100 rounded-2xl hover:bg-amber-100 transition-all font-bold group"
+                  onClick={() => handleExportPDF('purchases')}
+                  disabled={isExportingPdf}
+                  className="flex items-center gap-3 p-4 bg-amber-50 text-amber-700 border border-amber-100 rounded-2xl hover:bg-amber-100 transition-all font-bold group disabled:opacity-50"
                 >
                   <div className="p-2 bg-white rounded-lg shadow-sm group-hover:scale-110 transition-transform">
                     <ShoppingBag size={20} />
                   </div>
-                  <span className="urdu-text text-sm">{t.exportPurchasesExcel}</span>
+                  <span className="urdu-text text-sm">{isExportingPdf ? (lang === 'ur' ? 'محفوظ ہو رہا ہے...' : 'Generating...') : (t.exportPurchasesPdf || "Export Purchases to PDF")}</span>
+                </button>
+                <button 
+                  onClick={() => handleExportPDF('all')}
+                  disabled={isExportingPdf}
+                  className="col-span-1 sm:col-span-2 flex items-center justify-center gap-3 p-4 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-2xl hover:bg-indigo-100 transition-all font-bold group disabled:opacity-50"
+                >
+                  <div className="p-2 bg-white rounded-lg shadow-sm group-hover:scale-110 transition-transform">
+                    <Download size={20} />
+                  </div>
+                  <span className="urdu-text text-sm">{isExportingPdf ? (lang === 'ur' ? 'تمام ڈیٹا پی ڈی ایف میں محفوظ ہو رہا ہے...' : 'Generating Complete PDF Report...') : (t.exportAllDataPdf || "Export All Data to PDF")}</span>
                 </button>
               </div>
             </div>
@@ -950,6 +1043,7 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
           </div>
         </div>
       </div>
+      <PdfExportHidden ref={pdfRef} />
     </div>
   );
 }

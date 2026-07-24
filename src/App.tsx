@@ -47,7 +47,8 @@ import {
   findBackupOnDrive, 
   downloadBackupContent,
   addAuthListener,
-  setCachedAccessToken
+  setCachedAccessToken,
+  handleAuthRedirectResult
 } from './lib/googleDriveBackup';
 import { Cloud, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 
@@ -173,74 +174,23 @@ export default function App() {
 
   // Handle Google OAuth 2.0 redirect callbacks for both web and native deep linking
   useEffect(() => {
+    // Check for Google Auth redirect result (mostly native platforms)
+    handleAuthRedirectResult();
+
     // 1. Handle Web-side OAuth redirect (redirecting to native deep link, or logging in on web)
     if (!Capacitor.isNativePlatform()) {
       const hash = window.location.hash;
       if (hash && hash.includes('access_token=')) {
-        // Check if it's a native callback redirect
-        if (hash.includes('state=native')) {
-          const nativeSchemeUrl = `com.nafeesjewellers.app://oauth${hash}`;
-          
-          document.body.innerHTML = `
-            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background-color: #0c1222; color: white; font-family: sans-serif; padding: 20px; text-align: center;">
-              <div style="background: rgba(212, 175, 55, 0.08); border: 2px solid #D4AF37; padding: 40px; border-radius: 20px; max-width: 440px; box-shadow: 0 15px 35px rgba(0,0,0,0.4); text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                <div style="width: 60px; height: 60px; border-radius: 50%; border: 3px solid #D4AF37; display: flex; align-items: center; justify-content: center; margin-bottom: 24px;">
-                  <span style="font-size: 32px; color: #D4AF37; line-height: 1;">✓</span>
-                </div>
-                <h2 style="color: #D4AF37; margin-bottom: 12px; font-size: 26px; font-weight: bold; letter-spacing: -0.5px;">Nafees Jewellers ERP</h2>
-                <p style="font-size: 15px; color: #94a3b8; line-height: 1.6; margin-bottom: 28px;">
-                  Google Drive connected successfully! Opening the mobile app...
-                </p>
-                <a href="${nativeSchemeUrl}" style="display: inline-block; background-color: #D4AF37; color: black; font-weight: bold; text-decoration: none; padding: 14px 32px; border-radius: 12px; font-size: 16px; transition: transform 0.2s; box-shadow: 0 4px 12px rgba(212, 175, 55, 0.3);">
-                  Open Nafees ERP App
-                </a>
-                <p style="font-size: 12px; color: #64748b; margin-top: 20px; line-height: 1.4;">
-                  If the app did not open automatically, please click the golden button above.
-                </p>
-              </div>
-            </div>
-          `;
-          
-          setTimeout(() => {
-            window.location.href = nativeSchemeUrl;
-          }, 1200);
-        } else {
-          // It is a standard Web login. Parse token and set it.
-          const params = new URLSearchParams(hash.substring(1));
-          const token = params.get('access_token');
-          if (token) {
-            setCachedAccessToken(token).then(() => {
-              // Clear hash without reloading the page
-              window.history.replaceState(null, '', window.location.pathname);
-            });
-          }
+        // It is a standard Web login. Parse token and set it.
+        const params = new URLSearchParams(hash.substring(1));
+        const token = params.get('access_token');
+        if (token) {
+          setCachedAccessToken(token).then(() => {
+            // Clear hash without reloading the page
+            window.history.replaceState(null, '', window.location.pathname);
+          });
         }
       }
-    }
-
-    // 2. Handle Native-side deep links
-    if (Capacitor.isNativePlatform()) {
-      const handleAppUrlOpen = async (data: { url: string }) => {
-        console.log('App opened with URL:', data.url);
-        if (data.url && (data.url.includes('access_token=') || data.url.includes('#access_token='))) {
-          const parts = data.url.split('#');
-          const hashStr = parts[1] || parts[0].split('?')[1];
-          if (hashStr) {
-            const params = new URLSearchParams(hashStr);
-            const token = params.get('access_token');
-            if (token) {
-              console.log('Native App captured token from deep link. Activating Google Drive...');
-              await setCachedAccessToken(token);
-            }
-          }
-        }
-      };
-
-      CapApp.addListener('appUrlOpen', handleAppUrlOpen);
-
-      return () => {
-        CapApp.removeAllListeners();
-      };
     }
   }, []);
 

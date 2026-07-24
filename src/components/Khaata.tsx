@@ -978,11 +978,20 @@ export default function Khaata({ lang }: KhaataProps) {
               <div className="relative w-full sm:w-72" dir={isRTL ? "rtl" : "ltr"}>
                 <input
                   type="text"
+                  list="item-search-options"
                   placeholder={lang === 'ur' ? "آئٹم تلاش کریں (جیسے انگوٹھی، کانٹا)..." : "Search item (e.g. angoti, kanta)..."}
                   value={itemSearchTerm}
                   onChange={e => setItemSearchTerm(e.target.value)}
                   className={`w-full py-2 border border-zinc-200 rounded-xl outline-none focus:border-gold text-xs text-black font-semibold bg-white ${isRTL ? 'text-right pr-10 pl-8' : 'text-left pl-10 pr-8'}`}
                 />
+                <datalist id="item-search-options">
+                  {Array.from(new Set([
+                    ...(t.itemDetailsList || []),
+                    ...ledgerWithRunningBalances.flatMap(e => (e.details || '').split(', ')).filter(Boolean)
+                  ])).map((opt, idx) => (
+                    <option key={idx} value={opt} />
+                  ))}
+                </datalist>
                 <Search className={`absolute top-1/2 -translate-y-1/2 text-zinc-400 ${isRTL ? 'right-3' : 'left-3'}`} size={16} />
                 {itemSearchTerm && (
                   <button

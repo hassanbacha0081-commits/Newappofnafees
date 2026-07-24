@@ -1,3 +1,5 @@
+import appIconPath from './assets/images/nafees_app_icon_1783754016375.jpg';
+
 export const APP_CONFIG = {
   // Software Name
   softwareName: "Nafees Jewellers ERP",
@@ -19,7 +21,7 @@ export const APP_CONFIG = {
   androidPackageName: "com.nafeesjewellers.app",
 
   // Assets
-  appIcon: "/src/assets/images/nafees_app_icon_1783754016375.jpg",
+  appIcon: appIconPath,
   splashBg: "https://images.unsplash.com/photo-1599643477877-530eb83abc8e?q=80&w=1920&auto=format&fit=crop",
   
   // Branding Colors

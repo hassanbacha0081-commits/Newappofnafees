@@ -27,8 +27,18 @@ export default function LockScreen({ lang, correctPin, onUnlock, shopName }: Loc
   };
 
   return (
-    <div className="fixed inset-0 bg-sky-200 flex flex-col items-center justify-center p-4 z-50">
-      <div className="bg-white p-10 rounded-3xl shadow-2xl w-full max-w-sm border border-sky-100 flex flex-col items-center relative overflow-hidden">
+    <div 
+      className="fixed inset-0 flex flex-col items-center justify-center p-4 z-50"
+      style={{
+        backgroundImage: `url(${APP_CONFIG.splashBg})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }}
+    >
+      {/* Dark overlay for better contrast */}
+      <div className="absolute inset-0 bg-sky-950/70 backdrop-blur-sm"></div>
+
+      <div className="bg-white/95 p-10 rounded-3xl shadow-2xl w-full max-w-sm border border-sky-100 flex flex-col items-center relative overflow-hidden z-10 backdrop-blur-md">
         <div className="absolute top-0 left-0 w-full h-2 bg-gold"></div>
         
         <div className="w-28 h-28 bg-white border border-sky-50 rounded-2xl flex items-center justify-center mb-8 shadow-xl relative group">

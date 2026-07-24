@@ -2,6 +2,8 @@ import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
   signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider, 
   onAuthStateChanged, 
   type User 
@@ -89,24 +91,31 @@ export const setCachedAccessToken = async (token: string): Promise<{ user: User;
   return { user: mockUser, accessToken: token };
 };
 
+export const handleAuthRedirectResult = async () => {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const result = await getRedirectResult(auth);
+      if (result) {
+        const credential = GoogleAuthProvider.credentialFromResult(result);
+        if (credential?.accessToken) {
+          cachedAccessToken = credential.accessToken;
+          isDriveConnected = true;
+          await db.settings.put({ key: 'googleDriveConnected', value: 'true' });
+          onAuthChangedListeners.forEach(listener => listener(result.user, cachedAccessToken));
+        }
+      }
+    } catch (error) {
+      console.error('getRedirectResult error:', error);
+    }
+  }
+};
+
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
   try {
     isSigningIn = true;
 
     if (Capacitor.isNativePlatform()) {
-      const clientId = firebaseConfig.oAuthClientId;
-      const redirectUri = `https://${firebaseConfig.authDomain}`;
-      const scope = encodeURIComponent('https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email');
-      
-      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-        `client_id=${clientId}` +
-        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-        `&response_type=token` +
-        `&scope=${scope}` +
-        `&state=native` +
-        `&prompt=consent`;
-        
-      await Browser.open({ url: authUrl });
+      await signInWithRedirect(auth, provider);
       
       return new Promise((resolve) => {
         nativeResolve = resolve;
