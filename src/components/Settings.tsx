@@ -388,20 +388,20 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
         const khaataEntries = await db.khaataEntries.toArray();
         sections.push({
           heading: lang === 'ur' ? "کھاتہ تفصیلات" : "Khaata Entries",
-          columns: lang === 'ur' ? ['تاریخ', 'کھاتہ ID', 'قسم', 'سونے کا وزن', 'رقم', 'تفصیل'] : ['Date', 'Account ID', 'Type', 'Gold Wt', 'Amount', 'Details'],
+          columns: lang === 'ur' ? ['تاریخ', 'کھاتہ ID', 'قسم', 'خالص وزن', 'پاسہ دیا', 'تفصیل'] : ['Date', 'Account ID', 'Type', 'Pure Wt', 'Pasa Gold', 'Details'],
           data: khaataEntries.map(k => [
             k.date || '', k.accountId?.toString() || '', 
             lang === 'ur' ? (k.type === 'give' ? 'بنام (دیا)' : 'جمع (وصول)') : k.type || '', 
-            k.goldWeight?.toString() || '-', k.amount?.toLocaleString() || '-', k.details || ''
+            k.pureWeight?.toString() || '-', k.pasaDia?.toString() || '-', k.details || ''
           ])
         });
 
         const karigars = await db.karigars.toArray();
         sections.push({
           heading: lang === 'ur' ? "کاریگر کھاتہ" : "Karigar",
-          columns: lang === 'ur' ? ['نام', 'کام', 'دیا (گرام)', 'وصول (گرام)', 'مزدوری'] : ['Name', 'Task', 'Given(g)', 'Received(g)', 'Wages'],
+          columns: lang === 'ur' ? ['نام', 'کام', 'دیا (گرام)', 'وصول (گرام)', 'نیٹ (گرام)'] : ['Name', 'Task', 'Given(g)', 'Received(g)', 'Net(g)'],
           data: karigars.map(k => [
-            k.name || '', k.task || '', k.given?.toString() || '0', k.received?.toString() || '0', k.wages?.toLocaleString() || '0'
+            k.name || '', k.task || '', k.given?.toString() || '0', k.rec?.toString() || '0', k.net?.toString() || '0'
           ])
         });
 
@@ -410,18 +410,18 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
           heading: lang === 'ur' ? "مرمت" : "Repairs",
           columns: lang === 'ur' ? ['گاہک کا نام', 'فون نمبر', 'آئٹم', 'مسئلہ', 'قیمت', 'سٹیٹس'] : ['Customer', 'Phone', 'Item', 'Issue', 'Cost', 'Status'],
           data: repairs.map(r => [
-            r.customerName || '', r.customerPhone || '', r.item || '', r.issue || '', r.cost?.toLocaleString() || '0', 
-            lang === 'ur' ? (r.status === 'completed' ? 'مکمل' : 'زیر التواء') : r.status || ''
+            r.customerName || '', r.customerPhone || '', r.item || '', r.issue || '', r.charges?.toLocaleString() || '0', 
+            lang === 'ur' ? (r.status === 'Done' ? 'مکمل' : 'زیر التواء') : r.status || ''
           ])
         });
 
         const stock = await db.stock.toArray();
         sections.push({
           heading: lang === 'ur' ? "اسٹاک" : "Stock",
-          columns: lang === 'ur' ? ['آئٹم کا نام', 'قسم', 'مقدار', 'یونٹ', 'تفصیل'] : ['Item Name', 'Type', 'Quantity', 'Unit', 'Notes'],
+          columns: lang === 'ur' ? ['آئٹم کا نام', 'قسم', 'مقدار', 'یونٹ', 'پیسز'] : ['Item Name', 'Type', 'Quantity', 'Unit', 'Pieces'],
           data: stock.map(s => [
             s.name || '', lang === 'ur' ? (s.type === 'Gold' ? 'سونا' : 'آئٹم') : s.type || '', 
-            s.quantity?.toString() || '0', s.unit || '', s.notes || ''
+            s.quantity?.toString() || '0', s.unit || '', s.pieces?.toString() || '0'
           ])
         });
       }
