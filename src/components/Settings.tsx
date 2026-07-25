@@ -3,7 +3,7 @@ import { db } from '../db';
 import { translations, type Language } from '../translations';
 import { APP_CONFIG } from '../config';
 import { COLOR_PALETTES, type ColorPalette } from '../lib/colors';
-import { Save, Download, Upload, Languages, Trash2, AlertTriangle, BadgeDollarSign, History, ShoppingBag, Cloud, CloudOff, RefreshCw } from 'lucide-react';
+import { Save, Download, Upload, Languages, Trash2, AlertTriangle, BadgeDollarSign, History, ShoppingBag, Cloud, CloudOff, RefreshCw, Calendar } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { SecurityModal } from './SecurityModal';
 import { Capacitor } from '@capacitor/core';
@@ -16,7 +16,8 @@ import {
   logoutGoogleDrive, 
   autoBackupToDrive, 
   findBackupOnDrive, 
-  downloadBackupContent 
+  downloadBackupContent,
+  ensureAccessToken
 } from '../lib/googleDriveBackup';
 
 interface SettingsProps {
@@ -26,6 +27,72 @@ interface SettingsProps {
   paletteId: string;
   setPaletteId: (id: string) => void;
 }
+
+// Helper to parse dates from various database record formats
+const parseRecordDate = (dateVal: any): Date | null => {
+  if (!dateVal) return null;
+  if (dateVal instanceof Date) {
+    return isNaN(dateVal.getTime()) ? null : dateVal;
+  }
+  const str = String(dateVal).trim();
+  if (!str) return null;
+
+  if (str.includes('T')) {
+    const d = new Date(str);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  const slashParts = str.split('/');
+  if (slashParts.length === 3) {
+    if (slashParts[0].length === 4) {
+      return new Date(Number(slashParts[0]), Number(slashParts[1]) - 1, Number(slashParts[2]));
+    }
+    return new Date(Number(slashParts[2]), Number(slashParts[1]) - 1, Number(slashParts[0]));
+  }
+
+  const dashParts = str.split('-');
+  if (dashParts.length === 3) {
+    if (dashParts[0].length === 4) {
+      return new Date(Number(dashParts[0]), Number(dashParts[1]) - 1, Number(dashParts[2]));
+    } else if (dashParts[2].length === 4) {
+      return new Date(Number(dashParts[2]), Number(dashParts[1]) - 1, Number(dashParts[0]));
+    }
+  }
+
+  const parsed = new Date(str);
+  return isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const isDateInRange = (dateVal: any, startDateStr: string, endDateStr: string): boolean => {
+  if (!startDateStr && !endDateStr) return true;
+
+  const recDate = parseRecordDate(dateVal);
+  if (!recDate) return true;
+
+  let start = startDateStr ? parseRecordDate(startDateStr) : null;
+  let end = endDateStr ? parseRecordDate(endDateStr) : null;
+
+  if (start && isNaN(start.getTime())) start = null;
+  if (end && isNaN(end.getTime())) end = null;
+
+  if (start && end && start > end) {
+    const temp = start;
+    start = end;
+    end = temp;
+  }
+
+  if (start) {
+    start.setHours(0, 0, 0, 0);
+    if (recDate < start) return false;
+  }
+
+  if (end) {
+    end.setHours(23, 59, 59, 999);
+    if (recDate > end) return false;
+  }
+
+  return true;
+};
 
 export default function Settings({ lang, setGoldRate, setLang, paletteId, setPaletteId }: SettingsProps) {
   const t = translations[lang];
@@ -40,6 +107,10 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
   const [pinInput, setPinInput] = useState<string>('');
   const [showConfirmClear, setShowConfirmClear] = useState(false);
   const [securityAction, setSecurityAction] = useState<{ nameUr: string, nameEn: string, onVerify: () => void } | null>(null);
+
+  // PDF Date Filter states
+  const [exportStartDate, setExportStartDate] = useState<string>('');
+  const [exportEndDate, setExportEndDate] = useState<string>('');
 
   // Google Drive states
   const [gUser, setGUser] = useState<any>(null);
@@ -107,6 +178,14 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
     setIsGoogleLoading(true);
     setDriveStatusMessage(lang === 'ur' ? 'بیک اپ اپ لوڈ ہو رہا ہے...' : 'Uploading backup...');
     try {
+      let token = gToken;
+      if (!token) {
+        token = await ensureAccessToken();
+      }
+      if (!token) {
+        setDriveStatusMessage(lang === 'ur' ? 'گوگل ڈرائیو تک رسائی کی اجازت حاصل نہیں ہو سکی۔' : 'Could not obtain Google Drive access token.');
+        return;
+      }
       const success = await autoBackupToDrive();
       if (success) {
         setDriveStatusMessage(lang === 'ur' ? 'بیک اپ کامیابی سے اپ لوڈ ہو گیا!' : 'Backup uploaded successfully!');
@@ -124,7 +203,14 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
   };
 
   const handleManualDriveRestore = async () => {
-    if (!gToken) return;
+    let token = gToken;
+    if (!token) {
+      token = await ensureAccessToken();
+    }
+    if (!token) {
+      setDriveStatusMessage(lang === 'ur' ? 'گوگل ڈرائیو تک رسائی کی اجازت حاصل نہیں ہو سکی۔' : 'Could not obtain Google Drive access token.');
+      return;
+    }
     const confirmRestore = window.confirm(
       lang === 'ur' 
         ? 'انتباہ: یہ عمل آپ کے موجودہ تمام ڈیٹا کو ختم کر کے گوگل ڈرائیو کے بیک اپ سے بحال کر دے گا۔ کیا آپ آگے بڑھنا چاہتے ہیں؟' 
@@ -139,7 +225,7 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
         setIsGoogleLoading(true);
         setDriveStatusMessage(lang === 'ur' ? 'بیک اپ تلاش کیا جا رہا ہے...' : 'Searching for backup...');
         try {
-          const backupFile = await findBackupOnDrive(gToken);
+          const backupFile = await findBackupOnDrive(token);
           if (!backupFile) {
             alert(lang === 'ur' ? 'ڈرائیو پر کوئی بیک اپ فائل نہیں ملی!' : 'No backup file found on Drive!');
             setDriveStatusMessage(lang === 'ur' ? 'کوئی بیک اپ نہیں ملا۔' : 'No backup found.');
@@ -147,7 +233,7 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
           }
 
           setDriveStatusMessage(lang === 'ur' ? 'ڈیٹا ڈاؤن لوڈ ہو رہا ہے...' : 'Downloading backup data...');
-          const data = await downloadBackupContent(gToken, backupFile.id);
+          const data = await downloadBackupContent(token, backupFile.id);
           if (!data) {
             alert(lang === 'ur' ? 'بیک اپ ڈاؤن لوڈ کرنے میں ناکامی!' : 'Failed to download backup!');
             return;
@@ -326,11 +412,28 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
       setIsExportingPdf(true);
       
       const sections: PdfSection[] = [];
-      const filename = `All_Data_Export_${new Date().toISOString().split('T')[0]}.pdf`;
-      const title = lang === 'ur' ? "تمام ایپ کا ڈیٹا" : "All App Data Report";
+
+      let dateRangeLabel = "";
+      if (exportStartDate || exportEndDate) {
+        const startDisp = exportStartDate || '...';
+        const endDisp = exportEndDate || '...';
+        dateRangeLabel = lang === 'ur'
+          ? ` (${startDisp} تا ${endDisp})`
+          : ` (${startDisp} to ${endDisp})`;
+      }
+
+      const filenameDatePart = (exportStartDate || exportEndDate)
+        ? `${exportStartDate || 'start'}_to_${exportEndDate || 'end'}`
+        : new Date().toISOString().split('T')[0];
+
+      const filename = `Data_Export_${filenameDatePart}.pdf`;
+      const title = (lang === 'ur' ? "ایپ ڈیٹا رپورٹ" : "App Data Report") + dateRangeLabel;
 
       // 1. Sales
-      const sales = await db.sales.toArray();
+      let sales = await db.sales.toArray();
+      if (exportStartDate || exportEndDate) {
+        sales = sales.filter(s => isDateInRange(s.date, exportStartDate, exportEndDate));
+      }
       sections.push({
         heading: lang === 'ur' ? "سیلز ریکارڈ" : "Sales Records",
         columns: lang === 'ur' ? ['رسید نمبر', 'تاریخ', 'گاہک کا نام', 'فون نمبر', 'کل رقم', 'وصول شدہ', 'بکایا', 'آئٹمز'] : ['Invoice #', 'Date', 'Customer Name', 'Phone', 'Total', 'Received', 'Remaining', 'Items'],
@@ -347,7 +450,10 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
       });
 
       // 2. Purchases
-      const purchases = await db.goldPurchases.toArray();
+      let purchases = await db.goldPurchases.toArray();
+      if (exportStartDate || exportEndDate) {
+        purchases = purchases.filter(p => isDateInRange(p.date, exportStartDate, exportEndDate));
+      }
       sections.push({
         heading: lang === 'ur' ? "خریداری ریکارڈ" : "Purchases Records",
         columns: lang === 'ur' ? ['تاریخ', 'فروخت کنندہ کا نام', 'فون نمبر', 'وزن (گرام)', 'ریٹ', 'کل رقم'] : ['Date', 'Seller Name', 'Phone', 'Weight(g)', 'Rate', 'Total'],
@@ -362,7 +468,10 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
       });
 
       // 3. Orders
-      const orders = await db.orders.toArray();
+      let orders = await db.orders.toArray();
+      if (exportStartDate || exportEndDate) {
+        orders = orders.filter(o => isDateInRange(o.date, exportStartDate, exportEndDate));
+      }
       sections.push({
         heading: lang === 'ur' ? "آرڈرز" : "Orders",
         columns: lang === 'ur' ? ['تاریخ', 'واپسی کی تاریخ', 'گاہک کا نام', 'فون نمبر', 'کل رقم', 'سٹیٹس'] : ['Date', 'Due Date', 'Customer', 'Phone', 'Total', 'Status'],
@@ -373,7 +482,10 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
       });
 
       // 4. Khaata Entries
-      const khaataEntries = await db.khaataEntries.toArray();
+      let khaataEntries = db.khaataEntries ? await db.khaataEntries.toArray() : [];
+      if (exportStartDate || exportEndDate) {
+        khaataEntries = khaataEntries.filter(k => isDateInRange(k.date, exportStartDate, exportEndDate));
+      }
       sections.push({
         heading: lang === 'ur' ? "کھاتہ تفصیلات" : "Khaata Entries",
         columns: lang === 'ur' ? ['تاریخ', 'کھاتہ ID', 'قسم', 'خالص وزن', 'پاسہ دیا', 'تفصیل'] : ['Date', 'Account ID', 'Type', 'Pure Wt', 'Pasa Gold', 'Details'],
@@ -385,7 +497,10 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
       });
 
       // 5. Karigar
-      const karigars = await db.karigars.toArray();
+      let karigars = await db.karigars.toArray();
+      if (exportStartDate || exportEndDate) {
+        karigars = karigars.filter(k => isDateInRange(k.date, exportStartDate, exportEndDate));
+      }
       sections.push({
         heading: lang === 'ur' ? "کاریگر کھاتہ" : "Karigar",
         columns: lang === 'ur' ? ['نام', 'کام', 'دیا (گرام)', 'وصول (گرام)', 'نیٹ (گرام)'] : ['Name', 'Task', 'Given(g)', 'Received(g)', 'Net(g)'],
@@ -395,7 +510,10 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
       });
 
       // 6. Repairs
-      const repairs = await db.repairs.toArray();
+      let repairs = await db.repairs.toArray();
+      if (exportStartDate || exportEndDate) {
+        repairs = repairs.filter(r => isDateInRange(r.date, exportStartDate, exportEndDate));
+      }
       sections.push({
         heading: lang === 'ur' ? "مرمت" : "Repairs",
         columns: lang === 'ur' ? ['گاہک کا نام', 'فون نمبر', 'آئٹم', 'مسئلہ', 'قیمت', 'سٹیٹس'] : ['Customer', 'Phone', 'Item', 'Issue', 'Cost', 'Status'],
@@ -418,7 +536,10 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
 
       // 8. Expenses (if available)
       if (db.expenses) {
-        const expenses = await db.expenses.toArray();
+        let expenses = await db.expenses.toArray();
+        if (exportStartDate || exportEndDate) {
+          expenses = expenses.filter(e => isDateInRange(e.date, exportStartDate, exportEndDate));
+        }
         if (expenses.length > 0) {
           sections.push({
             heading: lang === 'ur' ? "اخراجات" : "Expenses",
@@ -845,13 +966,26 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-sky-200/50 text-sky-700">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                  {gUser ? 'Active' : 'Offline'}
+                  <span className={`w-2 h-2 rounded-full ${gUser && gToken ? 'bg-emerald-500 animate-ping' : gUser ? 'bg-amber-500' : 'bg-zinc-400'}`} />
+                  {gUser && gToken ? (lang === 'ur' ? 'مربوط (Active)' : 'Active') : gUser ? (lang === 'ur' ? 'اجازت درکار ہے' : 'Needs Access') : (lang === 'ur' ? 'منقطع (Offline)' : 'Offline')}
                 </div>
               </div>
 
               {gUser ? (
                 <div className="space-y-3">
+                  {!gToken && (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between gap-2 text-xs text-amber-900">
+                      <span className="urdu-text">{lang === 'ur' ? 'گوگل ڈرائیو بیک اپ کی اجازت کی ضرورت ہے۔' : 'Google Drive authorization required for backup.'}</span>
+                      <button 
+                        onClick={handleGoogleConnect}
+                        disabled={isGoogleLoading}
+                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs shrink-0 transition-colors"
+                      >
+                        {lang === 'ur' ? 'اجازت دیں' : 'Authorize Drive'}
+                      </button>
+                    </div>
+                  )}
+
                   <div className="p-3 bg-white rounded-xl border border-sky-100 text-xs text-zinc-600 space-y-1">
                     <div className="flex justify-between">
                       <span className="font-semibold">{lang === 'ur' ? 'مربوط اکاؤنٹ:' : 'Connected Account:'}</span>
@@ -979,10 +1113,66 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
 
             {/* PDF Export Section */}
             <div className="pt-8 border-t border-sky-100 space-y-4">
-              <div className="flex items-center gap-2 text-sky-900 font-bold urdu-text">
-                <Download className="text-indigo-600" />
-                {lang === 'ur' ? 'پی ڈی ایف رپورٹنگ (PDF Report)' : 'PDF Reporting'}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sky-900 font-bold urdu-text">
+                  <Download className="text-indigo-600" />
+                  {lang === 'ur' ? 'پی ڈی ایف رپورٹنگ (PDF Report)' : 'PDF Reporting'}
+                </div>
+                {(exportStartDate || exportEndDate) && (
+                  <button
+                    onClick={() => {
+                      setExportStartDate('');
+                      setExportEndDate('');
+                    }}
+                    className="text-xs text-indigo-600 hover:text-indigo-800 font-medium underline urdu-text"
+                  >
+                    {lang === 'ur' ? 'تمام تاریخیں (Clear Filter)' : 'Clear Filter'}
+                  </button>
+                )}
               </div>
+
+              {/* Date Filters */}
+              <div className="bg-indigo-50/70 p-4 rounded-xl border border-indigo-100 space-y-3">
+                <div className="flex items-center gap-2 text-xs font-bold text-indigo-900 urdu-text">
+                  <Calendar size={16} className="text-indigo-600" />
+                  {lang === 'ur' ? 'تاریخ کا انتخاب (ڈیٹا فلٹر):' : 'Select Date Range for PDF Export:'}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-600 mb-1 urdu-text">
+                      {lang === 'ur' ? 'شروعاتی تاریخ (From Date)' : 'From Date'}
+                    </label>
+                    <input
+                      type="date"
+                      value={exportStartDate}
+                      onChange={(e) => setExportStartDate(e.target.value)}
+                      className="w-full p-2.5 bg-white border border-indigo-200 rounded-lg text-sm text-black outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-600 mb-1 urdu-text">
+                      {lang === 'ur' ? 'آخری تاریخ (To Date)' : 'To Date'}
+                    </label>
+                    <input
+                      type="date"
+                      value={exportEndDate}
+                      onChange={(e) => setExportEndDate(e.target.value)}
+                      className="w-full p-2.5 bg-white border border-indigo-200 rounded-lg text-sm text-black outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                {exportStartDate && exportEndDate && (
+                  <p className="text-[11px] text-indigo-700 font-medium urdu-text text-center pt-1">
+                    {lang === 'ur'
+                      ? `منتخب تاریخیں: ${exportStartDate} سے ${exportEndDate} تک کا ڈیٹا پی ڈی ایف میں شامل ہوگا`
+                      : `Selected Range: Data from ${exportStartDate} to ${exportEndDate} will be included in the PDF`}
+                  </p>
+                )}
+              </div>
+
               <div>
                 <button 
                   onClick={() => handleExportPDF('all')}
@@ -994,8 +1184,10 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
                   </div>
                   <span className="urdu-text text-base">
                     {isExportingPdf 
-                      ? (lang === 'ur' ? 'تمام ڈیٹا پی ڈی ایف میں محفوظ ہو رہا ہے...' : 'Generating Complete PDF Report...') 
-                      : (t.exportAllDataPdf || "Export All Data to PDF")}
+                      ? (lang === 'ur' ? 'ڈیٹا پی ڈی ایف میں محفوظ ہو رہا ہے...' : 'Generating PDF Report...') 
+                      : (exportStartDate || exportEndDate)
+                        ? (lang === 'ur' ? 'منتخب تاریخوں کا پی ڈی ایف بنائیں' : 'Export Selected Dates to PDF')
+                        : (t.exportAllDataPdf || "Export All Data to PDF")}
                   </span>
                 </button>
               </div>
@@ -1030,7 +1222,7 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
           </div>
         </div>
       </div>
-      <PdfExportHidden ref={pdfRef} />
+      <PdfExportHidden ref={pdfRef} lang={lang} />
     </div>
   );
 }

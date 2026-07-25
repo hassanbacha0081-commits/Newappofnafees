@@ -495,6 +495,7 @@ export default function Orders({ lang }: OrdersProps) {
                   type="order" 
                   data={printData.data} 
                   id={printData.id} 
+                  lang={lang}
                 />
               </div>
               

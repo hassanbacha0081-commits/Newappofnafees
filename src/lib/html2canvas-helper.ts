@@ -67,10 +67,13 @@ export function colorToRgb(colorStr: string): string {
   // 1. Try browser canvas 2D context conversion first (native browser color engine)
   if (tempCtx) {
     try {
-      tempCtx.fillStyle = 'rgba(0, 0, 0, 0)';
+      tempCtx.globalCompositeOperation = 'copy';
+      tempCtx.fillStyle = 'rgba(1, 2, 3, 0.4)'; // sentinel value
       tempCtx.fillStyle = trimmed;
-      const resolved = tempCtx.fillStyle;
-      if (resolved && resolved !== 'rgba(0, 0, 0, 0)' && resolved !== '#00000000') {
+
+      if (tempCtx.fillStyle !== 'rgba(1, 2, 3, 0.4)' && tempCtx.fillStyle !== '#01020300') {
+        const resolved = tempCtx.fillStyle;
+
         if (resolved.startsWith('#')) {
           const hex = resolved.slice(1);
           if (hex.length === 6) {
@@ -82,11 +85,21 @@ export function colorToRgb(colorStr: string): string {
             const r = parseInt(hex.slice(0, 2), 16);
             const g = parseInt(hex.slice(2, 4), 16);
             const b = parseInt(hex.slice(4, 6), 16);
-            const a = parseFloat((parseInt(hex.slice(6, 8), 16) / 255).toFixed(3));
+            const a = Math.round((parseInt(hex.slice(6, 8), 16) / 255) * 100) / 100;
             return `rgba(${r}, ${g}, ${b}, ${a})`;
           }
+        } else if (resolved.startsWith('rgb(') || resolved.startsWith('rgba(')) {
+          return resolved;
         }
-        return resolved;
+
+        // Fallback for browsers returning oklch/color() string from fillStyle
+        tempCtx.fillRect(0, 0, 1, 1);
+        const [r, g, b, a] = tempCtx.getImageData(0, 0, 1, 1).data;
+        const alpha = Math.round((a / 255) * 100) / 100;
+        if (alpha < 1) {
+          return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+        return `rgb(${r}, ${g}, ${b})`;
       }
     } catch (e) {
       // Fallback to math parser
@@ -99,36 +112,43 @@ export function colorToRgb(colorStr: string): string {
 
 function mathColorFallback(colorStr: string): string {
   // oklab(L a b / A) or oklab(L, a, b, A)
-  const oklabMatch = colorStr.match(/oklab\(\s*([-+]?[0-9.]+%?)\s*[,/ ]\s*([-+]?[0-9.]+%?)\s*[,/ ]\s*([-+]?[0-9.]+%?)(?:\s*[,/ ]\s*([0-9.]+%?))?\s*\)/i);
+  const oklabMatch = colorStr.match(/oklab\(\s*([^\s,/]+)\s*[,/ ]\s*([^\s,/]+)\s*[,/ ]\s*([^\s,/]+)(?:\s*[,/ ]\s*([^\s,/]+))?\s*\)/i);
   if (oklabMatch) {
     const [, lStr, aStr, bStr, alphaStr] = oklabMatch;
     let l = parseFloat(lStr);
+    if (isNaN(l)) l = 0;
     if (lStr.includes('%')) l = l / 100;
 
     let a = parseFloat(aStr);
+    if (isNaN(a)) a = 0;
     if (aStr.includes('%')) a = (a / 100) * 0.4;
 
     let b = parseFloat(bStr);
+    if (isNaN(b)) b = 0;
     if (bStr.includes('%')) b = (b / 100) * 0.4;
 
     let alpha = 1;
     if (alphaStr) {
       alpha = alphaStr.includes('%') ? parseFloat(alphaStr) / 100 : parseFloat(alphaStr);
+      if (isNaN(alpha)) alpha = 1;
     }
     return oklabToRgb(l, a, b, alpha);
   }
 
   // oklch(L C H / A) or oklch(L, C, H, A)
-  const oklchMatch = colorStr.match(/oklch\(\s*([0-9.]+%?)\s*[,/ ]\s*([0-9.]+%?)\s*[,/ ]\s*([0-9.]+(?:deg|rad|grad|turn)?)(?:\s*[,/ ]\s*([0-9.]+%?))?\s*\)/i);
+  const oklchMatch = colorStr.match(/oklch\(\s*([^\s,/]+)\s*[,/ ]\s*([^\s,/]+)\s*[,/ ]\s*([^\s,/]+)(?:\s*[,/ ]\s*([^\s,/]+))?\s*\)/i);
   if (oklchMatch) {
     const [, lStr, cStr, hStr, alphaStr] = oklchMatch;
     let l = parseFloat(lStr);
+    if (isNaN(l)) l = 0;
     if (lStr.includes('%')) l = l / 100;
 
     let c = parseFloat(cStr);
+    if (isNaN(c)) c = 0;
     if (cStr.includes('%')) c = (c / 100) * 0.4;
 
     let h = parseFloat(hStr);
+    if (isNaN(h)) h = 0;
     if (hStr.includes('rad')) h = parseFloat(hStr) * (180 / Math.PI);
     else if (hStr.includes('turn')) h = parseFloat(hStr) * 360;
     else if (hStr.includes('grad')) h = parseFloat(hStr) * 0.9;
@@ -136,6 +156,7 @@ function mathColorFallback(colorStr: string): string {
     let alpha = 1;
     if (alphaStr) {
       alpha = alphaStr.includes('%') ? parseFloat(alphaStr) / 100 : parseFloat(alphaStr);
+      if (isNaN(alpha)) alpha = 1;
     }
     return oklchToRgb(l, c, h, alpha);
   }
@@ -145,91 +166,135 @@ function mathColorFallback(colorStr: string): string {
 
 export function needsConversion(str: string): boolean {
   if (!str || typeof str !== 'string') return false;
-  return str.includes('oklch') || str.includes('oklab') || str.includes('color-mix') || str.includes('color(');
+  return /oklch|oklab|color-mix|color\(|hwb\(|lab\(|lch\(/i.test(str);
 }
 
 /**
- * Searches and replaces all oklch(), oklab(), color-mix(), color() color functions in a CSS text with standard rgb()/rgba() equivalents.
+ * Searches and replaces all oklch(), oklab(), color-mix(), color(), etc. color functions
+ * in a CSS text with standard rgb()/rgba() equivalents using balanced parenthesis matching.
  */
 export function convertOklchInText(text: string): string {
   if (!needsConversion(text)) return text;
 
-  // Matches oklab(...), oklch(...), color-mix(...), color(...) with up to 2 levels of nested parens
-  const colorFuncRegex = /(?:oklab|oklch|color-mix|color)\((?:[^()]+|\((?:[^()]+|\([^()]*\))*\))*\)/gi;
+  const funcRegex = /(?:oklch|oklab|color-mix|color|hwb|lab|lch)\s*\(/gi;
+  let result = '';
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
 
-  return text.replace(colorFuncRegex, (match) => {
-    return colorToRgb(match);
-  });
+  while ((match = funcRegex.exec(text)) !== null) {
+    const startIndex = match.index;
+    const openParenIndex = startIndex + match[0].length - 1;
+
+    let depth = 1;
+    let currentIndex = openParenIndex + 1;
+    while (currentIndex < text.length && depth > 0) {
+      const char = text[currentIndex];
+      if (char === '(') depth++;
+      else if (char === ')') depth--;
+      currentIndex++;
+    }
+
+    if (depth === 0) {
+      const fullExpr = text.substring(startIndex, currentIndex);
+      const converted = colorToRgb(fullExpr);
+      result += text.substring(lastIndex, startIndex) + converted;
+      lastIndex = currentIndex;
+      funcRegex.lastIndex = currentIndex;
+    }
+  }
+
+  result += text.substring(lastIndex);
+  return result;
+}
+
+function getSheetCssText(sheet: CSSStyleSheet | null | undefined): string {
+  if (!sheet) return '';
+  try {
+    const rules = sheet.cssRules || (sheet as any).rules;
+    if (!rules) return '';
+    const parts: string[] = [];
+    for (let i = 0; i < rules.length; i++) {
+      const rule = rules[i];
+      if (rule instanceof CSSImportRule && rule.styleSheet) {
+        parts.push(getSheetCssText(rule.styleSheet));
+      } else if (rule.cssText) {
+        parts.push(rule.cssText);
+      }
+    }
+    return parts.join('\n');
+  } catch (e) {
+    return '';
+  }
 }
 
 /**
- * Prepares the DOM stylesheets for rendering with html2canvas by replacing all unsupported oklch/oklab color values.
+ * Prepares the DOM stylesheets for rendering with html2canvas by replacing all unsupported oklch/oklab color values in place.
  * Returns a cleanup callback function to restore original stylesheets.
  */
 export async function prepareStylesForHtml2Canvas(): Promise<() => void> {
-  const tempStyles: HTMLStyleElement[] = [];
-  const disabledLinks: HTMLLinkElement[] = [];
+  const restores: Array<() => void> = [];
 
-  // 1. Process all inline <style> tags
-  const styleTags = Array.from(document.querySelectorAll('style'));
-  for (const style of styleTags) {
-    const cssContent = style.innerHTML || (style.sheet ? Array.from(style.sheet.cssRules || []).map(r => r.cssText).join('\n') : '');
-    if (needsConversion(cssContent) && !style.hasAttribute('data-temp-html2canvas')) {
-      const convertedHtml = convertOklchInText(cssContent);
-      
-      const tempStyle = document.createElement('style');
-      tempStyle.innerHTML = convertedHtml;
-      tempStyle.setAttribute('data-temp-html2canvas', 'true');
-      document.head.appendChild(tempStyle);
-      
-      style.disabled = true; // disable original stylesheet safely
-      tempStyles.push(tempStyle);
+  const styleNodes = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]')) as Array<HTMLStyleElement | HTMLLinkElement>;
+
+  for (const node of styleNodes) {
+    let cssText = '';
+
+    // 1. Try CSSOM first (handles @import rules transparently)
+    if (node.sheet) {
+      cssText = getSheetCssText(node.sheet);
     }
-  }
 
-  // 2. Process all <link rel="stylesheet"> tags (same-origin files)
-  const linkTags = Array.from(document.querySelectorAll('link[rel="stylesheet"]')) as HTMLLinkElement[];
-  for (const link of linkTags) {
-    try {
-      const response = await fetch(link.href);
-      if (response.ok) {
-        const cssText = await response.text();
-        if (needsConversion(cssText)) {
-          const convertedCss = convertOklchInText(cssText);
-          
-          const tempStyle = document.createElement('style');
-          tempStyle.innerHTML = convertedCss;
-          tempStyle.setAttribute('data-temp-html2canvas', 'true');
+    // 2. Fall back to textContent / innerHTML or fetch
+    if (!cssText) {
+      if (node.tagName.toLowerCase() === 'style') {
+        cssText = node.textContent || node.innerHTML || '';
+      } else if (node.tagName.toLowerCase() === 'link') {
+        try {
+          const href = (node as HTMLLinkElement).href;
+          if (href) {
+            const res = await fetch(href);
+            if (res.ok) cssText = await res.text();
+          }
+        } catch (e) {}
+      }
+    }
+
+    if (cssText && needsConversion(cssText)) {
+      const converted = convertOklchInText(cssText);
+
+      if (node.tagName.toLowerCase() === 'style') {
+        const originalContent = node.textContent;
+        node.textContent = converted;
+        restores.push(() => {
+          node.textContent = originalContent;
+        });
+      } else if (node.tagName.toLowerCase() === 'link') {
+        const tempStyle = document.createElement('style');
+        tempStyle.textContent = converted;
+        tempStyle.setAttribute('data-temp-html2canvas', 'true');
+        if (node.parentNode) {
+          node.parentNode.insertBefore(tempStyle, node.nextSibling);
+        } else {
           document.head.appendChild(tempStyle);
-          
-          link.disabled = true; // disable original stylesheet safely
-          disabledLinks.push(link);
-          tempStyles.push(tempStyle);
         }
+
+        const originalDisabled = (node as HTMLLinkElement).disabled;
+        (node as HTMLLinkElement).disabled = true;
+
+        restores.push(() => {
+          tempStyle.remove();
+          (node as HTMLLinkElement).disabled = originalDisabled;
+        });
       }
-    } catch (e) {
-      console.warn("Could not load external stylesheet for conversion:", link.href, e);
     }
   }
 
-  // Return the cleanup function to revert stylesheet states
+  // Return the cleanup function
   return () => {
-    // Enable original style tags
-    const styleTagsToRestore = Array.from(document.querySelectorAll('style'));
-    for (const style of styleTagsToRestore) {
-      if (!style.hasAttribute('data-temp-html2canvas')) {
-        style.disabled = false;
-      }
-    }
-    
-    // Enable original link tags
-    for (const link of disabledLinks) {
-      link.disabled = false;
-    }
-    
-    // Remove temporary style tags
-    for (const temp of tempStyles) {
-      temp.remove();
+    for (const restore of restores) {
+      try {
+        restore();
+      } catch (e) {}
     }
   };
 }
@@ -246,6 +311,7 @@ export async function html2canvasWithOklch(element: HTMLElement, options?: Parti
   const colorProps = [
     'color',
     'backgroundColor',
+    'borderColor',
     'borderTopColor',
     'borderRightColor',
     'borderBottomColor',
@@ -255,28 +321,58 @@ export async function html2canvasWithOklch(element: HTMLElement, options?: Parti
     'fill',
     'stroke',
     'boxShadow',
-    'textShadow'
+    'textShadow',
+    'backgroundImage',
+    'caretColor'
   ];
 
   const mergedOptions: Partial<Options> = {
     ...options,
     onclone: (clonedDoc: Document, clonedEl: HTMLElement) => {
       try {
-        // 1. Convert any style tags inside the cloned document
-        const styleTags = Array.from(clonedDoc.querySelectorAll('style'));
-        for (const style of styleTags) {
-          if (needsConversion(style.innerHTML)) {
-            style.innerHTML = convertOklchInText(style.innerHTML);
+        // 1. Convert ALL <style> and <link> tags inside the cloned document
+        const clonedStyleNodes = Array.from(clonedDoc.querySelectorAll('style, link[rel="stylesheet"]')) as Array<HTMLStyleElement | HTMLLinkElement>;
+        for (const node of clonedStyleNodes) {
+          let cssText = '';
+          try {
+            if (node.sheet) {
+              cssText = getSheetCssText(node.sheet);
+            }
+          } catch (e) {}
+          if (!cssText) {
+            cssText = node.textContent || node.innerHTML || '';
+          }
+
+          if (cssText && needsConversion(cssText)) {
+            const converted = convertOklchInText(cssText);
+            const newStyle = clonedDoc.createElement('style');
+            newStyle.textContent = converted;
+            if (node.parentNode) {
+              node.parentNode.replaceChild(newStyle, node);
+            } else {
+              node.textContent = converted;
+            }
           }
         }
 
-        // 2. Fix computed colors on all cloned elements
+        // 2. Fix inline style attributes and computed colors on all cloned elements
         const win = clonedDoc.defaultView || window;
         const allNodes = Array.from(clonedDoc.querySelectorAll('*')) as HTMLElement[];
         allNodes.push(clonedEl);
 
         for (const node of allNodes) {
           if (!node.style) continue;
+
+          // Check style attribute
+          const rawStyle = node.getAttribute('style');
+          if (rawStyle && needsConversion(rawStyle)) {
+            node.setAttribute('style', convertOklchInText(rawStyle));
+          }
+
+          if (node.style.cssText && needsConversion(node.style.cssText)) {
+            node.style.cssText = convertOklchInText(node.style.cssText);
+          }
+
           let computed: CSSStyleDeclaration | null = null;
           try {
             computed = win.getComputedStyle(node);
@@ -286,9 +382,11 @@ export async function html2canvasWithOklch(element: HTMLElement, options?: Parti
           if (!computed) continue;
 
           for (const prop of colorProps) {
-            const val = computed[prop as any] || node.style[prop as any];
+            const val = computed[prop as any];
             if (val && typeof val === 'string' && needsConversion(val)) {
-              node.style[prop as any] = convertOklchInText(val);
+              const converted = convertOklchInText(val);
+              const cssPropName = prop.replace(/([A-Z])/g, '-$1').toLowerCase();
+              node.style.setProperty(cssPropName, converted, 'important');
             }
           }
         }

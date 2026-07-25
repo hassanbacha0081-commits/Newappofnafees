@@ -99,6 +99,7 @@ export interface Repair {
   charges: number;
   status: 'Pending' | 'Done';
   date: Date;
+  dueDate?: string;
   img?: string | null;
 }
 

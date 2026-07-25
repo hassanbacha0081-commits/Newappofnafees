@@ -5,13 +5,24 @@ import { translations } from '../translations';
 
 const WHATSAPP_ICON = "data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22448%22%20height%3D%22512%22%20viewBox%3D%220%200%20448%20512%22%3E%3Cpath%20fill%3D%22%2325D366%22%20d%3D%22M380.9%2097.1C339%2055.1%20283.2%2032%20223.9%2032c-122.4%200-222%2099.6-222%20222%200%2039.1%2010.2%2077.3%2029.6%20111L0%20480l117.7-30.9c32.4%2017.7%2068.9%2027%20106.1%2027h.1c122.3%200%20224.1-99.6%20224.1-222%200-59.3-25.2-115-67.1-157zm-157%20341.6c-33.1%200-65.6-8.9-94-25.7l-6.7-4-69.8%2018.3L72%20359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2%200-101.7%2082.8-184.5%20184.6-184.5%2049.3%200%2095.6%2019.2%20130.4%2054.1%2034.8%2034.9%2056.2%2081.2%2056.1%20130.5%200%20101.8-84.9%20184.6-186.6%20184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5%202.8-3.7%205.6-14.3%2018-17.6%2021.8-3.2%203.7-6.5%204.2-12%201.4-5.5-2.8-23.4-8.6-44.6-27.6-16.5-14.7-27.6-32.8-30.8-38.4-3.2-5.6-.3-8.6%202.5-11.4%202.5-2.5%205.5-6.5%208.3-9.7%202.8-3.2%203.7-5.5%205.6-9.2%201.9-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7%200-9.7%201.4-14.8%206.9-5.1%205.6-19.4%2019-19.4%2046.3%200%2027.3%2019.9%2053.7%2022.6%2057.4%202.8%203.7%2039.1%2059.7%2094.8%2083.8%2013.3%205.7%2023.7%209.1%2031.7%2011.7%2013.3%204.2%2025.5%203.6%2035.1%202.2%2010.7-1.6%2032.8-13.4%2037.4-26.4%204.6-13%204.6-24.1%203.2-26.4-1.3-2.5-5-3.9-10.5-6.6z%22%20%2F%3E%3C%2Fsvg%3E";
 
+import { Language } from '../translations';
+
 interface PrintReceiptProps {
   type: 'sale' | 'order' | 'repair' | 'karigar' | 'stock' | 'purchase';
   data: Sale | Order | Repair | KarigarRecord | StockItem | GoldPurchase;
   id?: number;
+  lang?: Language;
 }
 
-export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ type, data, id }, ref) => {
+export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ type, data, id, lang }, ref) => {
+  const [appLang, setAppLang] = useState<Language>(lang || 'ur');
+
+  useEffect(() => {
+    if (lang) {
+      setAppLang(lang);
+    }
+  }, [lang]);
+
   const [shopSettings, setShopSettings] = useState({
     name: translations.ur.shopName,
     address: translations.ur.shopAddress,
@@ -25,16 +36,23 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
       const address = await db.settings.get('shopAddress');
       const phone = await db.settings.get('shopPhone');
       const phone2 = await db.settings.get('shopPhone2');
+      const langSetting = await db.settings.get('appLanguage');
+
+      const currentLang: Language = lang || (langSetting?.value as Language) || (localStorage.getItem('app_language') as Language) || 'ur';
+      setAppLang(currentLang);
+      const t = translations[currentLang] || translations.ur;
       
       setShopSettings({
-        name: name?.value || translations.ur.shopName,
-        address: address?.value || translations.ur.shopAddress,
-        phone: phone?.value || translations.ur.shopPhone,
-        phone2: phone2?.value || translations.ur.shopPhone2
+        name: name?.value || t.shopName,
+        address: address?.value || t.shopAddress,
+        phone: phone?.value || t.shopPhone,
+        phone2: phone2?.value || t.shopPhone2
       });
     };
     fetchSettings();
-  }, []);
+  }, [lang]);
+
+  const isUrdu = appLang === 'ur';
 
   const isPurchase = type === 'purchase';
   const widthStr = isPurchase ? '21cm' : '14.8cm';
@@ -287,8 +305,8 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
     const oldGoldPrice = Math.round(sale.items.reduce((a, b) => a + (b.t < 0 ? Math.abs(b.t) : 0), 0));
 
     return (
-      <div ref={ref} className="print-receipt-container bg-white text-zinc-900" dir="rtl" style={{ 
-        fontFamily: "'Inter', sans-serif", 
+      <div ref={ref} className="print-receipt-container bg-white text-zinc-900" dir={isUrdu ? "rtl" : "ltr"} style={{ 
+        fontFamily: isUrdu ? "'Jameel Noori Nastaleeq', 'Noto Nastaliq Urdu', 'Inter', sans-serif" : "'Inter', sans-serif", 
         width: isPurchase ? '21cm' : '14.8cm',
         minHeight: isPurchase ? '29.7cm' : '21cm', 
         height: 'auto', 
@@ -303,8 +321,10 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
         <div className="header-section">
           <h1 className="shop-name text-center" style={{ width: '100%', display: 'block' }}>{shopSettings.name}</h1>
           <div style={{ height: '15px' }}></div>
-          <p className="text-2xl font-bold m-1 font-nastaliq">ہمارے ہاں سنگاپور اور دبئی ورائٹی دستیاب ہے۔</p>
-          <p className="text-lg m-1 font-nastaliq text-zinc-600">{shopSettings.address}</p>
+          <p className={`text-2xl font-bold m-1 ${isUrdu ? 'font-nastaliq' : ''}`}>
+            {isUrdu ? 'ہمارے ہاں سنگاپور اور دبئی ورائٹی دستیاب ہے۔' : 'Singapore & Dubai Variety Available Here.'}
+          </p>
+          <p className={`text-lg m-1 text-zinc-600 ${isUrdu ? 'font-nastaliq' : ''}`}>{shopSettings.address}</p>
           <div className="header-phone" dir="ltr">
             <div className="phone-brand-box">
               <img src={WHATSAPP_ICON} className="brand-icon" alt="WhatsApp" />
@@ -322,23 +342,23 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
           <table className="receipt-table" style={{ marginBottom: '10px' }}>
             <tbody>
               <tr>
-                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>نام کسٹمر</th>
-                <td className="font-nastaliq font-bold" style={{ width: '32%', paddingRight: '15px' }}>{sale.name}</td>
-                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>فون نمبر</th>
+                <th className={isUrdu ? "font-nastaliq" : ""} style={{ width: '18%', background: '#b8860b', color: 'white' }}>{isUrdu ? 'نام کسٹمر' : 'Customer'}</th>
+                <td className={`${isUrdu ? "font-nastaliq" : ""} font-bold`} style={{ width: '32%', paddingRight: '15px' }}>{sale.name}</td>
+                <th className={isUrdu ? "font-nastaliq" : ""} style={{ width: '18%', background: '#b8860b', color: 'white' }}>{isUrdu ? 'فون نمبر' : 'Phone'}</th>
                 <td className="font-mono" style={{ width: '32%' }} dir="ltr">{sale.phone}</td>
               </tr>
               <tr>
-                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>تاریخ</th>
+                <th className={isUrdu ? "font-nastaliq" : ""} style={{ width: '18%', background: '#b8860b', color: 'white' }}>{isUrdu ? 'تاریخ' : 'Date'}</th>
                 <td className="font-mono" style={{ width: '32%' }}>{sale.date}</td>
-                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>بل نمبر</th>
+                <th className={isUrdu ? "font-nastaliq" : ""} style={{ width: '18%', background: '#b8860b', color: 'white' }}>{isUrdu ? 'بل نمبر' : 'Invoice #'}</th>
                 <td className="font-mono font-bold text-gold" style={{ width: '32%' }}>#{1000 + (id || 0)}</td>
               </tr>
               <tr>
-                <th className="font-nastaliq" style={{ background: '#b8860b', color: 'white' }}>فی تولہ ریٹ</th>
+                <th className={isUrdu ? "font-nastaliq" : ""} style={{ background: '#b8860b', color: 'white' }}>{isUrdu ? 'فی تولہ ریٹ' : 'Rate / Tola'}</th>
                 <td className="font-mono font-bold text-gold">
                   {sale.items[0]?.r ? (sale.items[0].r * 12).toLocaleString() : '-'}
                 </td>
-                <th className="font-nastaliq" style={{ background: '#b8860b', color: 'white' }}>فی گرام ریٹ</th>
+                <th className={isUrdu ? "font-nastaliq" : ""} style={{ background: '#b8860b', color: 'white' }}>{isUrdu ? 'فی گرام ریٹ' : 'Rate / Gram'}</th>
                 <td className="font-mono font-bold text-gold">
                   {sale.items[0]?.r ? Math.round(sale.items[0].r).toLocaleString() : '-'}
                 </td>
@@ -349,18 +369,18 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
           <table className="receipt-table" style={{ tableLayout: 'fixed', width: '100%' }}>
             <thead>
               <tr style={{ background: '#b8860b' }}>
-                <th className="font-nastaliq" style={{ width: '18%', background: '#b8860b', color: 'white' }}>تفصیل</th>
-                <th className="font-nastaliq" style={{ width: '14%', background: '#b8860b', color: 'white' }}>تعداد</th>
-                <th className="font-nastaliq" style={{ width: '17%', background: '#b8860b', color: 'white' }}>وزن</th>
-                <th className="font-nastaliq" style={{ width: '17%', background: '#b8860b', color: 'white' }}>پالش</th>
-                <th className="font-nastaliq" style={{ width: '17%', background: '#b8860b', color: 'white' }}>کل وزن</th>
-                <th className="font-nastaliq" style={{ width: '17%', background: '#b8860b', color: 'white' }}>تصویر</th>
+                <th className={isUrdu ? "font-nastaliq" : ""} style={{ width: '18%', background: '#b8860b', color: 'white' }}>{isUrdu ? 'تفصیل' : 'Details'}</th>
+                <th className={isUrdu ? "font-nastaliq" : ""} style={{ width: '14%', background: '#b8860b', color: 'white' }}>{isUrdu ? 'تعداد' : 'Qty'}</th>
+                <th className={isUrdu ? "font-nastaliq" : ""} style={{ width: '17%', background: '#b8860b', color: 'white' }}>{isUrdu ? 'وزن' : 'Weight'}</th>
+                <th className={isUrdu ? "font-nastaliq" : ""} style={{ width: '17%', background: '#b8860b', color: 'white' }}>{isUrdu ? 'پالش' : 'Polish'}</th>
+                <th className={isUrdu ? "font-nastaliq" : ""} style={{ width: '17%', background: '#b8860b', color: 'white' }}>{isUrdu ? 'کل وزن' : 'Total Wt'}</th>
+                <th className={isUrdu ? "font-nastaliq" : ""} style={{ width: '17%', background: '#b8860b', color: 'white' }}>{isUrdu ? 'تصویر' : 'Image'}</th>
               </tr>
             </thead>
             <tbody>
               {sale.items.map((item, i) => (
                 <tr key={i}>
-                  <td className="text-center font-bold font-nastaliq" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.n}</td>
+                  <td className={`text-center font-bold ${isUrdu ? "font-nastaliq" : ""}`} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.n}</td>
                   <td className="font-mono">{item.t < 0 ? '-' : (item.p || 1)}</td>
                   <td className="font-mono font-bold">{parseFloat(Number(item.w).toFixed(2))}g</td>
                   <td className="font-mono">{parseFloat(Number(item.mk).toFixed(2))}g</td>
@@ -386,49 +406,64 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
             <table className="summary-table" style={{ marginLeft: 'auto' }}>
               <tbody>
                 <tr>
-                  <th className="font-nastaliq">بل رقم</th>
+                  <th className={isUrdu ? "font-nastaliq" : ""}>{isUrdu ? 'بل رقم' : 'Bill Amount'}</th>
                   <td className="font-mono">{billAmount.toLocaleString()}</td>
                 </tr>
                 <tr>
-                  <th className="font-nastaliq">مزدوری</th>
+                  <th className={isUrdu ? "font-nastaliq" : ""}>{isUrdu ? 'مزدوری' : 'Labor Cost'}</th>
                   <td className="font-mono">{mazdoriTotal.toLocaleString()}</td>
                 </tr>
                 <tr className="bg-zinc-50 font-bold">
-                  <th className="font-nastaliq">کل بل</th>
+                  <th className={isUrdu ? "font-nastaliq" : ""}>{isUrdu ? 'کل بل' : 'Total Bill'}</th>
                   <td className="font-mono">{totalBill.toLocaleString()}</td>
                 </tr>
                 <tr className="text-red-700">
-                  <th className="font-nastaliq">پرانا سونا قیمت (-)</th>
+                  <th className={isUrdu ? "font-nastaliq" : ""}>{isUrdu ? 'پرانا سونا قیمت (-)' : 'Old Gold (-) '}</th>
                   <td className="font-mono">{oldGoldPrice.toLocaleString()}</td>
                 </tr>
                 <tr className="text-green-700">
-                  <th className="font-nastaliq">وصول شدہ رقم</th>
+                  <th className={isUrdu ? "font-nastaliq" : ""}>{isUrdu ? 'وصول شدہ رقم' : 'Amount Received'}</th>
                   <td className="font-mono">{sale.rec.toLocaleString()}</td>
                 </tr>
                 {sale.discount ? (
                   <tr className="text-red-600">
-                    <th className="font-nastaliq">چھوٹ / رعایت</th>
+                    <th className={isUrdu ? "font-nastaliq" : ""}>{isUrdu ? 'چھوٹ / رعایت' : 'Discount'}</th>
                     <td className="font-mono">{sale.discount.toLocaleString()}</td>
                   </tr>
                 ) : null}
                 <tr className="final-total-row">
-                  <th className="font-nastaliq font-black">صاف بقایا</th>
+                  <th className={`${isUrdu ? "font-nastaliq" : ""} font-black`}>{isUrdu ? 'صاف بقایا' : 'Net Balance'}</th>
                   <td className="font-black font-mono">{sale.rem.toLocaleString()}</td>
                 </tr>
               </tbody>
             </table>
           </div>
 
-          <div className="terms font-nastaliq" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '20px', direction: 'rtl', marginTop: '15px' }}>
-            <div style={{ flex: 1, textAlign: 'right' }}>
-              <b>شرائط و ضوابط:</b><br />
-              1۔ زیورات کی واپسی پر 25% کاٹ لیا جائے گا۔<br />
-              2۔ کسٹمر اپنا تیار سامان 1 ہفتہ کے اندر وصول کرنے کا پابند ہوگا۔<br />
-              3۔ تیار شدہ سامان چھوڑنے پر 20% کاٹ لیا جائے گا۔<br />
-              4۔ فی تولہ 1 ماشہ پالش کاٹ ہوگا۔<br />
-              5۔ آرڈر دیتے وقت 75-80% رقم لازمی دینا ہوگی۔<br />
-              6۔ پرانے زیورات توڑ کر نئے زیورات تیار کرنے پر پانسہ 2 ماشہ اور پونڈ پانسہ 3 ماشہ فی تولہ کاٹ لیا جائے گا۔<br />
-              7۔ استعمال سے پہلے بینگلز کے وزن کی تسلی کریں، گھس جانے کی وجہ سے بعد میں دکاندار ذمہ دار نہیں ہوگا۔
+          <div className={`terms ${isUrdu ? 'font-nastaliq' : 'font-sans text-xs'}`} style={{ display: 'flex', items: 'center', justifyContent: 'space-between', gap: '20px', direction: isUrdu ? 'rtl' : 'ltr', marginTop: '15px' }}>
+            <div style={{ flex: 1, textAlign: isUrdu ? 'right' : 'left' }}>
+              {isUrdu ? (
+                <>
+                  <b>شرائط و ضوابط:</b><br />
+                  1۔ زیورات کی واپسی پر 25% کاٹ لیا جائے گا۔<br />
+                  2۔ کسٹمر اپنا تیار سامان 1 ہفتہ کے اندر وصول کرنے کا پابند ہوگا۔<br />
+                  3۔ تیار شدہ سامان چھوڑنے پر 20% کاٹ لیا جائے گا۔<br />
+                  4۔ فی تولہ 1 ماشہ پالش کاٹ ہوگا۔<br />
+                  5۔ آرڈر دیتے وقت 75-80% رقم لازمی دینا ہوگی۔<br />
+                  6۔ پرانے زیورات توڑ کر نئے زیورات تیار کرنے پر پانسہ 2 ماشہ اور پونڈ پانسہ 3 ماشہ فی تولہ کاٹ لیا جائے گا۔<br />
+                  7۔ استعمال سے پہلے بینگلز کے وزن کی تسلی کریں، گھس جانے کی وجہ سے بعد میں دکاندار ذمہ دار نہیں ہوگا۔
+                </>
+              ) : (
+                <>
+                  <b>Terms & Conditions:</b><br />
+                  1. 25% deduction applies on jewelry returns.<br />
+                  2. Customer must collect ready items within 1 week.<br />
+                  3. 20% deduction on abandoned ready items.<br />
+                  4. 1 Masha polish deduction per Tola.<br />
+                  5. 75-80% advance payment required for orders.<br />
+                  6. Old gold melting deductions apply as per standard rates.<br />
+                  7. Verify bangle weight prior to use; shop is not responsible for wear & tear thereafter.
+                </>
+              )}
             </div>
 
             <div style={{

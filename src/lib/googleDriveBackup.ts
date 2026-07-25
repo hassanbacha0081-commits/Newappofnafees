@@ -160,6 +160,17 @@ export const getAccessToken = (): string | null => {
   return cachedAccessToken;
 };
 
+export const ensureAccessToken = async (): Promise<string | null> => {
+  if (cachedAccessToken) return cachedAccessToken;
+  try {
+    const res = await googleSignIn();
+    return res?.accessToken || null;
+  } catch (err) {
+    console.error('Failed to get Google Drive access token:', err);
+    return null;
+  }
+};
+
 export const logoutGoogleDrive = async () => {
   await auth.signOut();
   cachedAccessToken = null;

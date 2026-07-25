@@ -299,6 +299,7 @@ export default function Records({ lang, setActiveSection, setEditingSale }: Reco
                   type={printData.type} 
                   data={printData.data} 
                   id={printData.id} 
+                  lang={lang}
                 />
               </div>
               

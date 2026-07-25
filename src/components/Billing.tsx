@@ -439,6 +439,7 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
                   type="sale" 
                   data={printData.data} 
                   id={printData.id} 
+                  lang={lang}
                 />
               </div>
 

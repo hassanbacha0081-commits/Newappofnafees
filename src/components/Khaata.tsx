@@ -1142,58 +1142,76 @@ export default function Khaata({ lang }: KhaataProps) {
               <div
                 key={pageIndex}
                 className="print-page bg-white relative p-8 w-[800px] h-[1130px] border-[6px] double border-gold rounded-lg mb-6"
-                style={{ fontFamily: 'Inter, sans-serif', boxSizing: 'border-box' }}
-                dir="rtl"
+                style={{ fontFamily: lang === 'ur' ? "'Jameel Noori Nastaleeq', 'Noto Nastaliq Urdu', Inter, sans-serif" : 'Inter, sans-serif', boxSizing: 'border-box' }}
+                dir={lang === 'ur' ? "rtl" : "ltr"}
               >
                 <div className="absolute inset-4 border border-dashed border-gold rounded pointer-events-none"></div>
                 
                 {/* Print Title */}
                 {pageIndex === 0 ? (
                   <div className="text-center border-b-2 border-gold pb-4 mb-6">
-                    <h1 className="text-4xl font-black urdu-text text-gold-dark mb-1">{translations.ur.shopName}</h1>
-                    <p className="text-sm font-bold text-zinc-500 font-nastaliq">{translations.ur.shopAddress}</p>
-                    <p className="text-xs font-mono mt-1" dir="ltr">{translations.ur.shopPhone}</p>
-                    <div className="inline-block bg-zinc-100 px-4 py-1 rounded-full font-bold urdu-text text-xs border border-zinc-200 mt-3">
-                      تفصیلی سونا کھاتہ رپورٹ (Khaata Statement)
-                      {itemSearchTerm && ` - فلٹر: ${itemSearchTerm}`}
+                    <h1 className="text-4xl font-black text-gold-dark mb-1">{t.shopName}</h1>
+                    <p className={`text-sm font-bold text-zinc-500 ${lang === 'ur' ? 'font-nastaliq' : ''}`}>{t.shopAddress}</p>
+                    <p className="text-xs font-mono mt-1" dir="ltr">{t.shopPhone}</p>
+                    <div className={`inline-block bg-zinc-100 px-4 py-1 rounded-full font-bold text-xs border border-zinc-200 mt-3 ${lang === 'ur' ? 'urdu-text' : ''}`}>
+                      {lang === 'ur' ? 'تفصیلی سونا کھاتہ رپورٹ (Khaata Statement)' : 'Detailed Gold Khaata Statement'}
+                      {itemSearchTerm && (lang === 'ur' ? ` - فلٹر: ${itemSearchTerm}` : ` - Filter: ${itemSearchTerm}`)}
                     </div>
                   </div>
                 ) : (
                   <div className="flex justify-between items-center border-b-2 border-gold pb-2 mb-4">
-                    <h2 className="text-xl font-bold urdu-text text-gold-dark">{translations.ur.shopName}</h2>
-                    <div className="text-xs text-zinc-500 font-bold urdu-text">
-                      تفصیلی رپورٹ کھاتہ دار: <span className="text-zinc-900 font-black">{selectedAccount?.name}</span> (صفحہ {pageIndex + 1} از {pages.length})
+                    <h2 className="text-xl font-bold text-gold-dark">{t.shopName}</h2>
+                    <div className={`text-xs text-zinc-500 font-bold ${lang === 'ur' ? 'urdu-text' : ''}`}>
+                      {lang === 'ur' ? 'تفصیلی رپورٹ کھاتہ دار: ' : 'Detailed Statement for: '}
+                      <span className="text-zinc-900 font-black">{selectedAccount?.name}</span>
+                      {lang === 'ur' ? ` (صفحہ ${pageIndex + 1} از ${pages.length})` : ` (Page ${pageIndex + 1} of ${pages.length})`}
                     </div>
                   </div>
                 )}
 
                 {/* Account Overview table */}
                 {pageIndex === 0 && (
-                  <table className="w-full border-collapse text-right text-xs mb-6">
+                  <table className={`w-full border-collapse text-xs mb-6 ${lang === 'ur' ? 'text-right' : 'text-left'}`}>
                     <tbody>
                       <tr className="border-b border-zinc-200">
-                        <th className="p-2 urdu-text font-bold text-black w-[20%]">نام کھاتہ دار:</th>
+                        <th className={`p-2 font-bold text-black w-[20%] ${lang === 'ur' ? 'urdu-text' : ''}`}>
+                          {lang === 'ur' ? 'نام کھاتہ دار:' : 'Account Holder:'}
+                        </th>
                         <td className="p-2 font-bold text-black text-sm w-[30%]">{selectedAccount?.name}</td>
-                        <th className="p-2 urdu-text font-bold text-black w-[20%]">فون نمبر:</th>
-                        <td className="p-2 font-mono font-bold text-black w-[30%]">{selectedAccount?.phone || '-'}</td>
+                        <th className={`p-2 font-bold text-black w-[20%] ${lang === 'ur' ? 'urdu-text' : ''}`}>
+                          {lang === 'ur' ? 'فون نمبر:' : 'Phone Number:'}
+                        </th>
+                        <td className="p-2 font-mono font-bold text-black w-[30%]" dir="ltr">{selectedAccount?.phone || '-'}</td>
                       </tr>
                       <tr className="border-b border-zinc-200">
-                        <th className="p-2 urdu-text font-bold text-black">تاریخ پرنٹ:</th>
-                        <td className="p-2 font-mono font-bold text-black">{formatDate(new Date(), 'ur-PK')}</td>
-                        <th className="p-2 urdu-text font-bold text-black">کُل آئٹم پاسا:</th>
+                        <th className={`p-2 font-bold text-black ${lang === 'ur' ? 'urdu-text' : ''}`}>
+                          {lang === 'ur' ? 'تاریخ پرنٹ:' : 'Print Date:'}
+                        </th>
+                        <td className="p-2 font-mono font-bold text-black">{formatDate(new Date(), lang === 'ur' ? 'ur-PK' : 'en-US')}</td>
+                        <th className={`p-2 font-bold text-black ${lang === 'ur' ? 'urdu-text' : ''}`}>
+                          {lang === 'ur' ? 'کُل آئٹم پاسا:' : 'Total Item Pure Gold:'}
+                        </th>
                         <td className="p-2 font-mono font-bold text-black">
                           {(accountSummary[selectedAccountId || 0]?.gold || 0).toFixed(2)}g
                         </td>
                       </tr>
                       <tr className="border-b border-zinc-200">
-                        <th className="p-2 urdu-text font-bold text-black">کُل پاسا دیا/ملا:</th>
+                        <th className={`p-2 font-bold text-black ${lang === 'ur' ? 'urdu-text' : ''}`}>
+                          {lang === 'ur' ? 'کُل پاسا دیا/ملا:' : 'Total Gold Paid/Rec:'}
+                        </th>
                         <td className="p-2 font-mono font-bold text-black">
                           {(accountSummary[selectedAccountId || 0]?.totalPasaDia || 0).toFixed(2)}g
                         </td>
-                        <th className="p-2 urdu-text font-bold text-black">صاف بقایا:</th>
+                        <th className={`p-2 font-bold text-black ${lang === 'ur' ? 'urdu-text' : ''}`}>
+                          {lang === 'ur' ? 'صاف بقایا:' : 'Net Balance:'}
+                        </th>
                         <td className="p-2 font-bold text-black text-sm">
-                          {Math.abs(accountSummary[selectedAccountId || 0]?.saafBaqaya || 0).toFixed(2)}g (سونا) {
-                            (accountSummary[selectedAccountId || 0]?.saafBaqaya || 0) > 0.005 ? '(ہمارے ذمہ)' : (accountSummary[selectedAccountId || 0]?.saafBaqaya || 0) < -0.005 ? '(ان کے ذمہ)' : '(حساب صاف)'
+                          {Math.abs(accountSummary[selectedAccountId || 0]?.saafBaqaya || 0).toFixed(2)}g {lang === 'ur' ? '(سونا)' : '(Gold)'} {
+                            (accountSummary[selectedAccountId || 0]?.saafBaqaya || 0) > 0.005 
+                              ? (lang === 'ur' ? '(ہمارے ذمہ)' : '(Our Liability)') 
+                              : (accountSummary[selectedAccountId || 0]?.saafBaqaya || 0) < -0.005 
+                                ? (lang === 'ur' ? '(ان کے ذمہ)' : '(Their Balance)') 
+                                : (lang === 'ur' ? '(حساب صاف)' : '(Settled)')
                           }
                         </td>
                       </tr>
@@ -1202,24 +1220,24 @@ export default function Khaata({ lang }: KhaataProps) {
                 )}
 
                 {/* Ledger table */}
-                <table className="w-full border border-zinc-300 border-collapse text-right text-xs">
+                <table className={`w-full border border-zinc-300 border-collapse text-xs ${lang === 'ur' ? 'text-right' : 'text-left'}`}>
                   <thead>
                     <tr className="bg-zinc-100 font-bold text-center text-black border-b border-zinc-300">
-                      <th className="p-2 border border-zinc-300 urdu-text">تاریخ</th>
-                      <th className="p-2 border border-zinc-300 urdu-text">تفصیل اشیاء</th>
-                      <th className="p-2 border border-zinc-300 urdu-text">پکائی</th>
-                      <th className="p-2 border border-zinc-300 urdu-text">مکس وزن</th>
-                      <th className="p-2 border border-zinc-300 urdu-text">کاٹ رتی</th>
-                      <th className="p-2 border border-zinc-300 urdu-text">آئٹم پاسا</th>
-                      <th className="p-2 border border-zinc-300 urdu-text">پاسا دیا</th>
-                      <th className="p-2 border border-zinc-300 urdu-text">بقایا</th>
+                      <th className={`p-2 border border-zinc-300 ${lang === 'ur' ? 'urdu-text' : ''}`}>{lang === 'ur' ? 'تاریخ' : 'Date'}</th>
+                      <th className={`p-2 border border-zinc-300 ${lang === 'ur' ? 'urdu-text' : ''}`}>{lang === 'ur' ? 'تفصیل اشیاء' : 'Item Details'}</th>
+                      <th className={`p-2 border border-zinc-300 ${lang === 'ur' ? 'urdu-text' : ''}`}>{lang === 'ur' ? 'پکائی' : 'Pakaye'}</th>
+                      <th className={`p-2 border border-zinc-300 ${lang === 'ur' ? 'urdu-text' : ''}`}>{lang === 'ur' ? 'مکس وزن' : 'Mix Weight'}</th>
+                      <th className={`p-2 border border-zinc-300 ${lang === 'ur' ? 'urdu-text' : ''}`}>{lang === 'ur' ? 'کاٹ رتی' : 'Kaat Rati'}</th>
+                      <th className={`p-2 border border-zinc-300 ${lang === 'ur' ? 'urdu-text' : ''}`}>{lang === 'ur' ? 'آئٹم پاسا' : 'Pure Gold'}</th>
+                      <th className={`p-2 border border-zinc-300 ${lang === 'ur' ? 'urdu-text' : ''}`}>{lang === 'ur' ? 'پاسا دیا' : 'Gold Paid'}</th>
+                      <th className={`p-2 border border-zinc-300 ${lang === 'ur' ? 'urdu-text' : ''}`}>{lang === 'ur' ? 'بقایا' : 'Balance'}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {pageEntries.map((e) => (
                       <tr key={e.id} className="border-b border-zinc-200 text-center hover:bg-zinc-50 transition-colors">
                         <td className="p-2 border border-zinc-300 font-bold font-mono text-black">{e.date}</td>
-                        <td className="p-2 border border-zinc-300 urdu-text font-bold text-black">{e.details}</td>
+                        <td className={`p-2 border border-zinc-300 font-bold text-black ${lang === 'ur' ? 'urdu-text' : ''}`}>{e.details}</td>
                         <td className="p-2 border border-zinc-300 font-mono font-bold text-black">{e.pakaye > 0 ? `${parseFloat(e.pakaye.toFixed(2))} R` : '-'}</td>
                         <td className="p-2 border border-zinc-300 font-mono font-bold text-black">{e.mixWeight > 0 ? `${e.mixWeight.toFixed(2)}g` : '-'}</td>
                         <td className="p-2 border border-zinc-300 font-mono font-bold text-black">{e.kaatRati > 0 ? `${e.kaatRati} R` : '-'}</td>
@@ -1230,8 +1248,10 @@ export default function Khaata({ lang }: KhaataProps) {
                     ))}
                     {pageEntries.length === 0 && pageIndex === 0 && (
                       <tr>
-                        <td colSpan={8} className="p-8 text-center text-zinc-400 font-bold urdu-text">
-                          کھاتہ میں اب تک کوئی انٹری نہیں ہوئی۔ انٹری کرنے کے لیے اوپر "کھاتہ انٹری کریں" پر کلک کریں۔
+                        <td colSpan={8} className={`p-8 text-center text-zinc-400 font-bold ${lang === 'ur' ? 'urdu-text' : ''}`}>
+                          {lang === 'ur' 
+                            ? 'کھاتہ میں اب تک کوئی انٹری نہیں ہوئی۔ انٹری کرنے کے لیے اوپر "کھاتہ انٹری کریں" پر کلک کریں۔'
+                            : 'No entries found in this Khaata. Click "Add Entry" above to record a transaction.'}
                         </td>
                       </tr>
                     )}
@@ -1240,8 +1260,8 @@ export default function Khaata({ lang }: KhaataProps) {
 
                 {/* Statement Terms Footer */}
                 <div className="absolute bottom-8 left-8 right-8 flex justify-between items-center text-[10px] text-zinc-500 border-t pt-4">
-                  <span>{translations.ur.shopName} - تصدیق شدہ کھاتہ تفصیل</span>
-                  <span>صفحہ {pageIndex + 1} از {pages.length}</span>
+                  <span>{t.shopName} - {lang === 'ur' ? 'تصدیق شدہ کھاتہ تفصیل' : 'Verified Khaata Statement'}</span>
+                  <span>{lang === 'ur' ? `صفحہ ${pageIndex + 1} از ${pages.length}` : `Page ${pageIndex + 1} of ${pages.length}`}</span>
                 </div>
               </div>
             ));

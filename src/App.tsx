@@ -38,6 +38,9 @@ import Settings from './components/Settings';
 import LockScreen from './components/LockScreen';
 import Expenses from './components/Expenses';
 import Khaata from './components/Khaata';
+import NotificationsCenter from './components/NotificationsCenter';
+import { NotificationBell } from './components/NotificationBell';
+import { UrgentAlertBanner } from './components/UrgentAlertBanner';
 import { getPaletteStyles } from './lib/colors';
 
 import { APP_CONFIG } from './config';
@@ -55,10 +58,21 @@ import { Cloud, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 type Section = 'billing' | 'purchases' | 'records' | 'orders' | 'karigar' | 'repairs' | 'stock' | 'customers' | 'expenses' | 'reports' | 'settings' | 'khaata';
 
 export default function App() {
-  const [lang, setLang] = useState<Language>('ur');
+  const [lang, setLangState] = useState<Language>('ur');
+
+  const setLang = (newLang: Language) => {
+    setLangState(newLang);
+    try {
+      localStorage.setItem('app_language', newLang);
+      db.settings.put({ key: 'appLanguage', value: newLang });
+    } catch (e) {
+      console.error('Failed to persist language setting:', e);
+    }
+  };
   const [activeSection, setActiveSection] = useState<Section>('billing');
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [goldRate, setGoldRate] = useState<number>(0);
   const [shopName, setShopName] = useState<string>(translations.ur.shopName);
   const [shopAddress, setShopAddress] = useState<string>(translations.ur.shopAddress);
@@ -94,6 +108,16 @@ export default function App() {
       const lastBackupDate = await db.settings.get('lastBackupDate');
       const paletteSetting = await db.settings.get('colorPalette');
       
+      const appLang = await db.settings.get('appLanguage');
+      if (appLang && (appLang.value === 'ur' || appLang.value === 'en')) {
+        setLangState(appLang.value as Language);
+      } else {
+        const storedLang = localStorage.getItem('app_language');
+        if (storedLang === 'ur' || storedLang === 'en') {
+          setLangState(storedLang as Language);
+        }
+      }
+
       if (rate) setGoldRate(rate.value);
       if (name) setShopName(name.value);
       if (address) setShopAddress(address.value);
@@ -451,6 +475,9 @@ export default function App() {
           ))}
         </nav>
         <div className="p-4 border-t border-sky-500 bg-sky-700/50 space-y-2">
+          <div className="w-full">
+            <NotificationBell onClick={() => setIsNotificationsOpen(true)} lang={lang} />
+          </div>
           <button
             onClick={() => setActiveSection('settings')}
             className={cn(
@@ -490,9 +517,12 @@ export default function App() {
             <span className="font-mono text-white font-bold">{shopPhone}</span>
           </div>
         </div>
-        <button onClick={() => setLang(lang === 'ur' ? 'en' : 'ur')} className="p-2 text-sky-100 hover:text-white">
-          <Languages size={24} />
-        </button>
+        <div className="flex items-center gap-1">
+          <NotificationBell onClick={() => setIsNotificationsOpen(true)} lang={lang} />
+          <button onClick={() => setLang(lang === 'ur' ? 'en' : 'ur')} className="p-2 text-sky-100 hover:text-white">
+            <Languages size={24} />
+          </button>
+        </div>
       </div>
 
       {/* Mobile Sidebar Overlay */}
@@ -588,6 +618,7 @@ export default function App() {
       {/* Main Content */}
       <main className="flex-1 p-4 lg:p-10 mt-16 lg:mt-0 overflow-y-auto">
         <div className="max-w-7xl mx-auto">
+          <UrgentAlertBanner onOpenNotifications={() => setIsNotificationsOpen(true)} lang={lang} />
           <AnimatePresence mode="wait">
             <motion.div
               key={activeSection}
@@ -601,6 +632,15 @@ export default function App() {
           </AnimatePresence>
         </div>
       </main>
+
+      {/* Notifications Drawer / Center */}
+      <NotificationsCenter
+        isOpen={isNotificationsOpen}
+        onClose={() => setIsNotificationsOpen(false)}
+        lang={lang}
+        shopName={shopName}
+        onNavigateToSection={(section) => setActiveSection(section)}
+      />
 
       {/* Toast Notification for back button exit */}
       <AnimatePresence>

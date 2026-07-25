@@ -36,7 +36,8 @@ export default function Repairs({ lang }: RepairsProps) {
     item: '',
     issue: '',
     charges: 0,
-    status: 'Pending'
+    status: 'Pending',
+    dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   });
 
   const [printData, setPrintData] = useState<{ data: Repair } | null>(null);
@@ -271,6 +272,7 @@ export default function Repairs({ lang }: RepairsProps) {
                   ref={printRef}
                   type="repair" 
                   data={printData.data} 
+                  lang={lang}
                 />
               </div>
               
@@ -414,6 +416,17 @@ export default function Repairs({ lang }: RepairsProps) {
                 className="w-full bg-white border border-sky-200 rounded-lg p-3 focus:border-gold outline-none text-black"
               />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-500 mb-1 urdu-text">
+                {lang === 'ur' ? 'مرمت کی آخری تاریخ (ڈیڈ لائن):' : 'Repair Deadline / Due Date:'}
+              </label>
+              <input 
+                type="date" 
+                value={formData.dueDate || ''}
+                onChange={e => setFormData({...formData, dueDate: e.target.value})}
+                className="w-full bg-white border border-sky-200 rounded-lg p-3 focus:border-gold outline-none text-black font-mono"
+              />
+            </div>
             <div className="mt-4 space-y-3">
               <label className="text-sm font-medium text-zinc-500 mb-1 urdu-text">تصویر (کیمرہ):</label>
               <div className="flex flex-col sm:flex-row gap-4">
@@ -484,6 +497,12 @@ export default function Repairs({ lang }: RepairsProps) {
             <div className="space-y-2 mb-4">
               <p className="text-sm text-zinc-700"><span className="text-zinc-500 urdu-text">{t.itemName}:</span> {repair.item}</p>
               <p className="text-sm text-zinc-700"><span className="text-zinc-500 urdu-text">{t.issue}:</span> {repair.issue}</p>
+              {repair.dueDate && (
+                <p className="text-sm text-zinc-700 flex justify-between">
+                  <span className="text-zinc-500 urdu-text">{lang === 'ur' ? 'ڈیڈ لائن:' : 'Deadline:'}</span>
+                  <span className="font-mono font-bold text-sky-900">{repair.dueDate}</span>
+                </p>
+              )}
               {repair.img && (
                 <div className="flex justify-between text-sky-800 bg-sky-50 px-2 py-1 rounded-md border border-sky-100 text-sm">
                   <span className="urdu-text text-xs">{lang === 'ur' ? 'تصویر' : 'Image'}:</span>

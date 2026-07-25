@@ -426,6 +426,7 @@ export default function Purchases({ lang }: PurchasesProps) {
         <PrintReceipt
           ref={componentRef}
           type="purchase"
+          lang={lang}
           data={printItem || {
             name,
             phone,

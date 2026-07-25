@@ -296,6 +296,7 @@ export default function Karigar({ lang }: KarigarProps) {
                   type="karigar" 
                   data={printData.data} 
                   id={printData.id} 
+                  lang={lang}
                 />
               </div>
               

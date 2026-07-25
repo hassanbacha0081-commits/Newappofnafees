@@ -256,6 +256,7 @@ export default function Stock({ lang }: StockProps) {
                   type="stock" 
                   data={printData.data} 
                   id={printData.id} 
+                  lang={lang}
                 />
               </div>
               
