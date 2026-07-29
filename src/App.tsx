@@ -51,7 +51,8 @@ import {
   downloadBackupContent,
   addAuthListener,
   setCachedAccessToken,
-  handleAuthRedirectResult
+  handleAuthRedirectResult,
+  initDriveFromStorage
 } from './lib/googleDriveBackup';
 import { Cloud, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 
@@ -196,25 +197,38 @@ export default function App() {
     fetchSettings();
   }, []);
 
-  // Handle Google OAuth 2.0 redirect callbacks for both web and native deep linking
+  // Handle Google OAuth 2.0 redirect callbacks and persistent drive hydration
   useEffect(() => {
-    // Check for Google Auth redirect result (mostly native platforms)
+    initDriveFromStorage();
     handleAuthRedirectResult();
 
-    // 1. Handle Web-side OAuth redirect (redirecting to native deep link, or logging in on web)
+    // 1. Handle Web-side OAuth redirect hash
     if (!Capacitor.isNativePlatform()) {
       const hash = window.location.hash;
       if (hash && hash.includes('access_token=')) {
-        // It is a standard Web login. Parse token and set it.
         const params = new URLSearchParams(hash.substring(1));
         const token = params.get('access_token');
         if (token) {
           setCachedAccessToken(token).then(() => {
-            // Clear hash without reloading the page
             window.history.replaceState(null, '', window.location.pathname);
           });
         }
       }
+    } else {
+      // 2. Handle Native deep link callback
+      CapApp.addListener('appUrlOpen', async (data) => {
+        if (data?.url && data.url.includes('access_token=')) {
+          const hashIdx = data.url.indexOf('#');
+          if (hashIdx !== -1) {
+            const hashStr = data.url.substring(hashIdx + 1);
+            const params = new URLSearchParams(hashStr);
+            const token = params.get('access_token');
+            if (token) {
+              await setCachedAccessToken(token);
+            }
+          }
+        }
+      });
     }
   }, []);
 
@@ -622,10 +636,10 @@ export default function App() {
           <AnimatePresence mode="wait">
             <motion.div
               key={activeSection}
-              initial={{ opacity: 0, y: 12, scale: 0.995 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -12, scale: 0.995 }}
-              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.1, ease: 'easeOut' }}
             >
               {renderSection()}
             </motion.div>

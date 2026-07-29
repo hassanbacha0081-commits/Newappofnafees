@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type StockItem } from '../db';
 import { translations, type Language } from '../translations';
@@ -150,19 +150,20 @@ export default function Stock({ lang }: StockProps) {
   };
 
   const [searchTerm, setSearchTerm] = useState('');
-  const stock = useLiveQuery(() => {
+  const rawStock = useLiveQuery(() => {
     if (!db.stock) return Promise.resolve([]);
-    if (!searchTerm) return db.stock.toArray();
-    
+    return db.stock.toArray();
+  }) || [];
+
+  const stock = useMemo(() => {
+    if (!searchTerm.trim()) return rawStock;
     const term = searchTerm.toLowerCase();
-    return db.stock
-      .filter(s => 
-        s.name.toLowerCase().includes(term) || 
-        s.type.toLowerCase().includes(term) ||
-        s.id?.toString() === searchTerm
-      )
-      .toArray();
-  }, [searchTerm]);
+    return rawStock.filter(s => 
+      s.name.toLowerCase().includes(term) || 
+      s.type.toLowerCase().includes(term) ||
+      s.id?.toString() === searchTerm
+    );
+  }, [rawStock, searchTerm]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

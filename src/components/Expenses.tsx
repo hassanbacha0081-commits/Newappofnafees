@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Expense } from '../db';
 import { 
@@ -43,15 +43,25 @@ export default function Expenses({ lang }: ExpensesProps) {
     { id: 'other', ur: 'متفرق', en: 'Misc' }
   ];
 
-  const filteredExpenses = expenses.filter(e => 
-    e.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    e.category.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredExpenses = useMemo(() => {
+    if (!searchTerm.trim()) return expenses;
+    const term = searchTerm.toLowerCase();
+    return expenses.filter(e => 
+      e.description.toLowerCase().includes(term) ||
+      e.category.toLowerCase().includes(term)
+    );
+  }, [expenses, searchTerm]);
 
-  const totalExpenses = expenses.reduce((acc, e) => acc + e.amount, 0);
-  const todayExpenses = expenses
-    .filter(e => e.date === new Date().toISOString().split('T')[0])
-    .reduce((acc, e) => acc + e.amount, 0);
+  const { totalExpenses, todayExpenses } = useMemo(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    let tot = 0;
+    let tod = 0;
+    expenses.forEach(e => {
+      tot += e.amount || 0;
+      if (e.date === todayStr) tod += e.amount || 0;
+    });
+    return { totalExpenses: tot, todayExpenses: tod };
+  }, [expenses]);
 
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault();

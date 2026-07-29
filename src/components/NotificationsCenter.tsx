@@ -40,47 +40,26 @@ export default function NotificationsCenter({
   onNavigateToSection
 }: NotificationsCenterProps) {
   const isUrdu = lang === 'ur';
-  const { notifications, totalCount, overdueCount, dueTodayCount, upcomingCount } = useAppNotifications();
+  const {
+    notifications,
+    dismissedNotifications,
+    totalCount,
+    overdueCount,
+    dueTodayCount,
+    upcomingCount,
+    dismissNotification,
+    dismissAllNotifications,
+    restoreNotification,
+    clearAllDismissedNotifications,
+  } = useAppNotifications();
 
-  const [activeTab, setActiveTab] = useState<'all' | 'overdue' | 'installments' | 'repairs'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'overdue' | 'installments' | 'repairs' | 'checked'>('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [snoozedIds, setSnoozedIds] = useState<string[]>([]);
 
-  // Load snoozed/dismissed IDs from localStorage
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem('snoozed_notifications');
-      if (stored) {
-        setSnoozedIds(JSON.parse(stored));
-      }
-    } catch (e) {
-      console.error('Failed to load snoozed notifications:', e);
-    }
-  }, []);
+  // Filter list based on tab and search term
+  const currentList = activeTab === 'checked' ? dismissedNotifications : notifications;
 
-  const handleSnooze = (id: string) => {
-    const updated = [...snoozedIds, id];
-    setSnoozedIds(updated);
-    try {
-      localStorage.setItem('snoozed_notifications', JSON.stringify(updated));
-    } catch (e) {
-      console.error('Failed to save snoozed notifications:', e);
-    }
-  };
-
-  const handleClearSnoozed = () => {
-    setSnoozedIds([]);
-    try {
-      localStorage.removeItem('snoozed_notifications');
-    } catch (e) {
-      console.error('Failed to clear snoozed notifications:', e);
-    }
-  };
-
-  // Filter notifications based on tab, search, and snoozed list
-  const activeNotifications = notifications.filter((n) => {
-    if (snoozedIds.includes(n.id)) return false;
-
+  const filteredNotifications = currentList.filter((n) => {
     if (activeTab === 'overdue' && n.severity !== 'overdue') return false;
     if (activeTab === 'installments' && n.type !== 'order_installment') return false;
     if (activeTab === 'repairs' && n.type !== 'repair_deadline') return false;
@@ -130,9 +109,9 @@ export default function NotificationsCenter({
               <div>
                 <h2 className="text-xl font-black text-white flex items-center gap-2">
                   {isUrdu ? 'اطلاعات اور تنبیہات' : 'Notifications & Alerts'}
-                  {notifications.length > 0 && (
+                  {totalCount > 0 && (
                     <span className="bg-amber-500 text-slate-950 font-mono text-xs px-2.5 py-0.5 rounded-full font-bold">
-                      {notifications.length - snoozedIds.length}
+                      {totalCount}
                     </span>
                   )}
                 </h2>
@@ -173,26 +152,40 @@ export default function NotificationsCenter({
             </div>
           </div>
 
-          {/* Search & Tabs Controls */}
+          {/* Controls & Action Bar */}
           <div className="p-4 bg-white border-b border-slate-200 space-y-3">
-            {/* Search Input */}
-            <div className="relative">
-              <Search className={`absolute top-3 text-slate-400 w-4 h-4 ${isUrdu ? 'right-3' : 'left-3'}`} />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder={isUrdu ? 'کسٹمر کا نام، موبائل یا آئٹم تلاش کریں...' : 'Search customer, phone or item...'}
-                className={`w-full bg-slate-100/80 border border-slate-200 rounded-xl py-2 px-3 text-sm focus:border-amber-500 focus:bg-white outline-none text-slate-800 transition-all ${
-                  isUrdu ? 'pr-9' : 'pl-9'
-                }`}
-              />
-              {searchTerm && (
+            <div className="flex items-center gap-2">
+              {/* Search Input */}
+              <div className="relative flex-1">
+                <Search className={`absolute top-3 text-slate-400 w-4 h-4 ${isUrdu ? 'right-3' : 'left-3'}`} />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder={isUrdu ? 'کسٹمر کا نام، موبائل یا آئٹم...' : 'Search name, phone, item...'}
+                  className={`w-full bg-slate-100/80 border border-slate-200 rounded-xl py-2 px-3 text-sm focus:border-amber-500 focus:bg-white outline-none text-slate-800 transition-all ${
+                    isUrdu ? 'pr-9' : 'pl-9'
+                  }`}
+                />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    className={`absolute top-2.5 text-slate-400 hover:text-slate-600 ${isUrdu ? 'left-3' : 'right-3'}`}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Mark All as Checked Button */}
+              {notifications.length > 0 && activeTab !== 'checked' && (
                 <button
-                  onClick={() => setSearchTerm('')}
-                  className={`absolute top-2.5 text-slate-400 hover:text-slate-600 ${isUrdu ? 'left-3' : 'right-3'}`}
+                  onClick={() => dismissAllNotifications(notifications.map((n) => n.id))}
+                  className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0"
+                  title={isUrdu ? 'تمام اطلاعات کو دیکھا گیا مارک کریں' : 'Mark all notifications as checked'}
                 >
-                  <X className="w-4 h-4" />
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span className="hidden sm:inline">{isUrdu ? 'تمام دیکھا گیا' : 'Mark All Checked'}</span>
                 </button>
               )}
             </div>
@@ -207,7 +200,7 @@ export default function NotificationsCenter({
                     : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
                 }`}
               >
-                {isUrdu ? 'تمام' : 'All'} ({notifications.length - snoozedIds.length})
+                {isUrdu ? 'تمام' : 'All'} ({notifications.length})
               </button>
               <button
                 onClick={() => setActiveTab('overdue')}
@@ -240,42 +233,68 @@ export default function NotificationsCenter({
                 }`}
               >
                 <Wrench className="w-3.5 h-3.5" />
-                {isUrdu ? 'مرمت (Repairs)' : 'Repairs'}
+                {isUrdu ? 'مرمت' : 'Repairs'}
+              </button>
+
+              {/* Checked / Hidden Tab */}
+              <button
+                onClick={() => setActiveTab('checked')}
+                className={`px-3 py-1.5 rounded-lg border transition-all whitespace-nowrap flex items-center gap-1 ${
+                  activeTab === 'checked'
+                    ? 'bg-slate-800 text-white border-slate-800 shadow-sm'
+                    : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
+                }`}
+              >
+                <Check className="w-3.5 h-3.5" />
+                {isUrdu ? 'دیکھی گئی / مخفی' : 'Checked / Hidden'} ({dismissedNotifications.length})
               </button>
             </div>
           </div>
 
           {/* List of Notifications */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-100/50">
-            {activeNotifications.length === 0 ? (
+            {filteredNotifications.length === 0 ? (
               <div className="py-16 text-center space-y-3">
                 <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto text-emerald-600 border border-emerald-200 shadow-inner">
                   <CheckCircle2 className="w-8 h-8" />
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-slate-800">
-                    {isUrdu ? 'تمام کام اور اقساط اپ ٹو ڈیٹ ہیں!' : 'All clear! No pending alerts'}
+                    {activeTab === 'checked'
+                      ? isUrdu
+                        ? 'کوئی بھی دیکھی گئی یا مخفی اطلاع موجود نہیں ہے۔'
+                        : 'No checked or hidden notifications'
+                      : isUrdu
+                      ? 'تمام کام اور اقساط اپ ٹو ڈیٹ ہیں!'
+                      : 'All clear! No pending alerts'}
                   </h3>
                   <p className="text-xs text-slate-500 max-w-xs mx-auto mt-1">
-                    {isUrdu
+                    {activeTab === 'checked'
+                      ? isUrdu
+                        ? 'جب آپ نوٹیفکیشن پر "دیکھ لیا" کلک کریں گے، وہ یہاں منتقل ہوں گی۔'
+                        : 'Notifications you mark as checked will be listed here.'
+                      : isUrdu
                       ? 'کوئی تاخیر شدہ قسط یا واجب الادا مرمت موجود نہیں ہے۔'
                       : 'You have no upcoming or overdue installments or repair deadlines right now.'}
                   </p>
                 </div>
-                {snoozedIds.length > 0 && (
+                {dismissedNotifications.length > 0 && activeTab !== 'checked' && (
                   <button
-                    onClick={handleClearSnoozed}
+                    onClick={() => setActiveTab('checked')}
                     className="mt-2 text-xs text-amber-700 underline font-bold hover:text-amber-900"
                   >
-                    {isUrdu ? 'خفیہ/مخفی کی گئی اطلاعات دوبارہ دکھائیں' : 'Reset hidden alerts'}
+                    {isUrdu
+                      ? `دیکھی گئی / مخفی اطلاعات (${dismissedNotifications.length}) دیکھیں`
+                      : `View checked/hidden notifications (${dismissedNotifications.length})`}
                   </button>
                 )}
               </div>
             ) : (
-              activeNotifications.map((notification) => {
+              filteredNotifications.map((notification) => {
                 const isOverdue = notification.severity === 'overdue';
                 const isDueToday = notification.severity === 'due_today';
                 const isInstallment = notification.type === 'order_installment';
+                const isCheckedTab = activeTab === 'checked';
 
                 let badgeBg = 'bg-blue-100 text-blue-800 border-blue-300';
                 let badgeLabel = isUrdu
@@ -302,7 +321,9 @@ export default function NotificationsCenter({
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95 }}
                     className={`bg-white rounded-2xl border p-4 shadow-sm hover:shadow-md transition-all relative overflow-hidden group ${
-                      isOverdue
+                      isCheckedTab
+                        ? 'border-slate-200 opacity-80'
+                        : isOverdue
                         ? 'border-red-300 ring-1 ring-red-100'
                         : isDueToday
                         ? 'border-amber-300 ring-1 ring-amber-100'
@@ -312,7 +333,13 @@ export default function NotificationsCenter({
                     {/* Top Stripe Color */}
                     <div
                       className={`absolute top-0 left-0 right-0 h-1.5 ${
-                        isOverdue ? 'bg-red-600' : isDueToday ? 'bg-amber-500' : 'bg-sky-500'
+                        isCheckedTab
+                          ? 'bg-slate-400'
+                          : isOverdue
+                          ? 'bg-red-600'
+                          : isDueToday
+                          ? 'bg-amber-500'
+                          : 'bg-sky-500'
                       }`}
                     />
 
@@ -384,49 +411,59 @@ export default function NotificationsCenter({
                     </div>
 
                     {/* Actions Bar */}
-                    <div className="flex items-center justify-between gap-2 pt-1">
-                      {/* Send WhatsApp Reminder */}
-                      {notification.customerPhone ? (
-                        <a
-                          href={whatsappUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all"
-                        >
-                          <MessageCircle className="w-3.5 h-3.5" />
-                          <span>{isUrdu ? 'یاد دہانی بھیجیں' : 'WhatsApp Reminder'}</span>
-                        </a>
-                      ) : (
-                        <span className="text-[11px] text-slate-400 font-italic">
-                          {isUrdu ? 'فون نمبر موجود نہیں' : 'No Phone'}
-                        </span>
-                      )}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100">
+                      <div className="flex items-center gap-2 flex-1">
+                        {/* Send WhatsApp Reminder */}
+                        {notification.customerPhone ? (
+                          <a
+                            href={whatsappUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" />
+                            <span>{isUrdu ? 'یاد دہانی بھیجیں' : 'WhatsApp'}</span>
+                          </a>
+                        ) : null}
 
-                      {/* View Record in App */}
-                      {onNavigateToSection && (
+                        {/* View Record in App */}
+                        {onNavigateToSection && (
+                          <button
+                            onClick={() => {
+                              onNavigateToSection(
+                                isInstallment ? 'orders' : 'repairs',
+                                notification.targetId
+                              );
+                              onClose();
+                            }}
+                            className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs py-2 px-3 rounded-xl flex items-center gap-1 transition-all border border-slate-200"
+                          >
+                            <span>{isUrdu ? 'دیکھیں' : 'View'}</span>
+                            <ChevronRight className={`w-3.5 h-3.5 ${isUrdu ? 'rotate-180' : ''}`} />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Explicit Checked / Don't show again Option */}
+                      {!isCheckedTab ? (
                         <button
-                          onClick={() => {
-                            onNavigateToSection(
-                              isInstallment ? 'orders' : 'repairs',
-                              notification.targetId
-                            );
-                            onClose();
-                          }}
-                          className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs py-2 px-3 rounded-xl flex items-center gap-1 transition-all border border-slate-200"
+                          onClick={() => dismissNotification(notification.id)}
+                          className="bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-800 border border-emerald-300 font-extrabold text-xs py-2 px-3 rounded-xl flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                          title={isUrdu ? 'دیکھ لیا - دوبارہ نہ دکھائیں' : 'Mark as checked and hide'}
                         >
-                          <span>{isUrdu ? 'دیکھیں' : 'View'}</span>
-                          <ChevronRight className={`w-3.5 h-3.5 ${isUrdu ? 'rotate-180' : ''}`} />
+                          <Check className="w-4 h-4 text-emerald-600 group-hover:text-white" />
+                          <span>{isUrdu ? 'دیکھ لیا (دوبارہ نہ دکھائیں)' : 'Checked (Don\'t show again)'}</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => restoreNotification(notification.id)}
+                          className="bg-amber-50 hover:bg-amber-500 hover:text-white text-amber-900 border border-amber-300 font-extrabold text-xs py-2 px-3 rounded-xl flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                          title={isUrdu ? 'دوبارہ فعال کریں' : 'Show again in alerts'}
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                          <span>{isUrdu ? 'دوبارہ فعال کریں' : 'Show Again'}</span>
                         </button>
                       )}
-
-                      {/* Dismiss / Acknowledge */}
-                      <button
-                        onClick={() => handleSnooze(notification.id)}
-                        title={isUrdu ? 'اطلاع چھپائیں' : 'Dismiss Alert'}
-                        className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
-                      >
-                        <Check className="w-4 h-4 text-emerald-600" />
-                      </button>
                     </div>
                   </motion.div>
                 );
@@ -439,12 +476,12 @@ export default function NotificationsCenter({
             <span className="text-[11px]">
               {isUrdu ? 'آٹومیٹک نوٹیفکیشن الرٹ سسٹم' : 'Automatic In-App Alert System'}
             </span>
-            {snoozedIds.length > 0 && (
+            {dismissedNotifications.length > 0 && (
               <button
-                onClick={handleClearSnoozed}
-                className="text-[11px] text-sky-800 hover:underline font-bold"
+                onClick={clearAllDismissedNotifications}
+                className="text-[11px] text-amber-800 hover:underline font-bold"
               >
-                {isUrdu ? `خفیہ کی گئی (${snoozedIds.length}) دکھائیں` : `Show hidden (${snoozedIds.length})`}
+                {isUrdu ? 'تمام مخفی اطلاعات بحال کریں' : 'Reset all hidden notifications'}
               </button>
             )}
           </div>

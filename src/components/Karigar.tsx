@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type KarigarRecord } from '../db';
 import { translations, type Language } from '../translations';
@@ -159,21 +159,21 @@ export default function Karigar({ lang }: KarigarProps) {
     }
   };
 
-  const karigars = useLiveQuery(() => {
+  const rawKarigars = useLiveQuery(() => {
     if (!db.karigars) return Promise.resolve([]);
-    if (!searchTerm) return db.karigars.orderBy('id').reverse().toArray();
-    
+    return db.karigars.orderBy('id').reverse().toArray();
+  }) || [];
+
+  const karigars = useMemo(() => {
+    if (!searchTerm.trim()) return rawKarigars;
     const term = searchTerm.toLowerCase();
-    return db.karigars
-      .filter(k => 
-        k.name.toLowerCase().includes(term) || 
-        k.phone.includes(searchTerm) ||
-        k.task.toLowerCase().includes(term) ||
-        k.id?.toString() === searchTerm
-      )
-      .reverse()
-      .toArray();
-  }, [searchTerm]);
+    return rawKarigars.filter(k => 
+      k.name.toLowerCase().includes(term) || 
+      k.phone.includes(searchTerm) ||
+      k.task.toLowerCase().includes(term) ||
+      k.id?.toString() === searchTerm
+    );
+  }, [rawKarigars, searchTerm]);
 
   const reCalc = () => {
     const g = formData.given || 0;

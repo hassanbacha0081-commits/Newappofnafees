@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Order } from '../db';
 import { translations, type Language } from '../translations';
@@ -179,24 +179,22 @@ export default function Orders({ lang }: OrdersProps) {
   const [qistAmount, setQistAmount] = useState<string>('');
   const [selectedOrderForQist, setSelectedOrderForQist] = useState<Order | null>(null);
 
-  const orders = useLiveQuery(async () => {
+  const rawOrders = useLiveQuery(async () => {
     if (!db.orders) return [];
-    
-    let result: Order[];
-    if (!searchTerm) {
-      result = await db.orders.orderBy('id').reverse().toArray();
-    } else {
+    return await db.orders.orderBy('id').reverse().toArray();
+  }) || [];
+
+  const orders = useMemo(() => {
+    let result = rawOrders;
+    if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
-      result = await db.orders
-        .filter(o => 
-          o.name.toLowerCase().includes(term) || 
-          o.phone.includes(searchTerm) ||
-          o.karigar.toLowerCase().includes(term) ||
-          (o.item && o.item.toLowerCase().includes(term)) ||
-          o.id?.toString() === searchTerm
-        )
-        .reverse()
-        .toArray();
+      result = rawOrders.filter(o => 
+        o.name.toLowerCase().includes(term) || 
+        o.phone.includes(searchTerm) ||
+        o.karigar.toLowerCase().includes(term) ||
+        (o.item && o.item.toLowerCase().includes(term)) ||
+        o.id?.toString() === searchTerm
+      );
     }
 
     const statusOrder: Record<string, number> = {
@@ -206,17 +204,23 @@ export default function Orders({ lang }: OrdersProps) {
       'delivered': 4
     };
 
-    return result.sort((a, b) => {
+    return [...result].sort((a, b) => {
       const valA = statusOrder[a.status] || 99;
       const valB = statusOrder[b.status] || 99;
       if (valA !== valB) return valA - valB;
       return (b.id || 0) - (a.id || 0); // Keep newest first within same status
     });
-  }, [searchTerm]);
+  }, [rawOrders, searchTerm]);
 
-  const totalOrdersWeight = orders?.reduce((sum, o) => sum + (parseFloat(o.readyWt) || 0), 0) || 0;
-  const totalOrdersPolish = orders?.reduce((sum, o) => sum + (parseFloat(o.makingCharges || '0') || 0), 0) || 0;
-  const totalOrdersMazdori = orders?.reduce((sum, o) => sum + (o.mazdori || 0), 0) || 0;
+  const { totalOrdersWeight, totalOrdersPolish, totalOrdersMazdori } = useMemo(() => {
+    let w = 0, p = 0, m = 0;
+    orders.forEach(o => {
+      w += parseFloat(o.readyWt) || 0;
+      p += parseFloat(o.makingCharges || '0') || 0;
+      m += o.mazdori || 0;
+    });
+    return { totalOrdersWeight: w, totalOrdersPolish: p, totalOrdersMazdori: m };
+  }, [orders]);
 
   const updateRem = () => {
     if (editId) { return formData.total - formData.payments.reduce((s, p) => s + p.amt, 0) - formData.discount; } return formData.total - formData.recAmt - formData.discount;

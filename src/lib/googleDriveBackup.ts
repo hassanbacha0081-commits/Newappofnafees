@@ -9,6 +9,7 @@ import {
   type User 
 } from 'firebase/auth';
 import { Browser } from '@capacitor/browser';
+import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { db } from '../db';
@@ -32,37 +33,97 @@ let isDriveConnected = false;
 // Initialize auth state listener
 onAuthStateChanged(auth, async (user: User | null) => {
   if (user) {
-    isDriveConnected = !!cachedAccessToken;
-  } else {
-    // If not on native platform, clear cached token on Firebase logout
-    if (!Capacitor.isNativePlatform()) {
-      cachedAccessToken = null;
-      isDriveConnected = false;
+    if (cachedAccessToken) {
+      isDriveConnected = true;
     }
   }
-  
-  onAuthChangedListeners.forEach(listener => listener(user, cachedAccessToken));
+  onAuthChangedListeners.forEach(listener => listener(user || (cachedAccessToken ? buildMockUser() : null), cachedAccessToken));
 });
+
+function buildMockUser(googleUser?: any): User {
+  if (googleUser) {
+    return {
+      uid: googleUser.id || 'google_drive_user',
+      email: googleUser.email || 'connected@nafeesjewellers.com',
+      displayName: googleUser.name || 'Nafees ERP Drive Account',
+      photoURL: googleUser.picture || '',
+    } as any;
+  }
+  return {
+    uid: 'google_drive_user',
+    displayName: 'Nafees ERP Drive Account',
+    email: 'connected@nafeesjewellers.com'
+  } as any;
+}
 
 export const addAuthListener = (listener: (user: User | null, token: string | null) => void) => {
   onAuthChangedListeners.push(listener);
   // Call immediately with current state
-  listener(auth.currentUser, cachedAccessToken);
+  const currentUser = auth.currentUser || (cachedAccessToken ? buildMockUser() : null);
+  listener(currentUser, cachedAccessToken);
   return () => {
     onAuthChangedListeners = onAuthChangedListeners.filter(l => l !== listener);
   };
 };
 
+export const initDriveFromStorage = async (): Promise<boolean> => {
+  try {
+    let token = cachedAccessToken;
+    if (!token) {
+      token = localStorage.getItem('google_drive_access_token');
+      if (!token) {
+        const savedSetting = await db.settings.get('googleDriveAccessToken');
+        if (savedSetting?.value) token = savedSetting.value;
+      }
+    }
+
+    if (token) {
+      // Validate token with Google userinfo
+      const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const googleUser = await response.json();
+        const userObj = buildMockUser(googleUser);
+        cachedAccessToken = token;
+        isDriveConnected = true;
+
+        await db.settings.put({ key: 'googleDriveConnected', value: 'true' });
+        await db.settings.put({ key: 'googleDriveAccessToken', value: token });
+        localStorage.setItem('google_drive_access_token', token);
+
+        onAuthChangedListeners.forEach(listener => listener(userObj, token));
+        return true;
+      } else {
+        console.warn('Stored Google Drive token expired or invalid:', response.status);
+        // Clean up stale token
+        localStorage.removeItem('google_drive_access_token');
+        await db.settings.put({ key: 'googleDriveAccessToken', value: '' });
+      }
+    }
+  } catch (err) {
+    console.error('Error initializing Google Drive from storage:', err);
+  }
+  return false;
+};
+
+// Immediately try hydrating from storage on module load
+initDriveFromStorage().catch(() => {});
+
 export const setCachedAccessToken = async (token: string): Promise<{ user: User; accessToken: string }> => {
   cachedAccessToken = token;
   isDriveConnected = true;
-  await db.settings.put({ key: 'googleDriveConnected', value: 'true' });
-  
-  let mockUser: User = { 
-    uid: 'native_google_user', 
-    displayName: 'Nafees ERP Drive Account',
-    email: 'connected@nafeesjewellers.com'
-  } as any;
+
+  try {
+    localStorage.setItem('google_drive_access_token', token);
+    await db.settings.put({ key: 'googleDriveConnected', value: 'true' });
+    await db.settings.put({ key: 'googleDriveAccessToken', value: token });
+  } catch (e) {
+    console.error('Failed to persist drive token:', e);
+  }
+
+  let mockUser = buildMockUser();
 
   try {
     const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
@@ -70,19 +131,14 @@ export const setCachedAccessToken = async (token: string): Promise<{ user: User;
     });
     if (response.ok) {
       const googleUser = await response.json();
-      mockUser = {
-        uid: googleUser.id,
-        email: googleUser.email,
-        displayName: googleUser.name,
-        photoURL: googleUser.picture,
-      } as any;
+      mockUser = buildMockUser(googleUser);
     }
   } catch (err) {
     console.error('Error fetching Google User profile info:', err);
   }
 
   onAuthChangedListeners.forEach(listener => listener(mockUser, token));
-  
+
   if (nativeResolve) {
     nativeResolve({ user: mockUser, accessToken: token });
     nativeResolve = null;
@@ -92,76 +148,134 @@ export const setCachedAccessToken = async (token: string): Promise<{ user: User;
 };
 
 export const handleAuthRedirectResult = async () => {
-  if (Capacitor.isNativePlatform()) {
-    try {
-      const result = await getRedirectResult(auth);
-      if (result) {
-        const credential = GoogleAuthProvider.credentialFromResult(result);
-        if (credential?.accessToken) {
-          cachedAccessToken = credential.accessToken;
-          isDriveConnected = true;
-          await db.settings.put({ key: 'googleDriveConnected', value: 'true' });
-          onAuthChangedListeners.forEach(listener => listener(result.user, cachedAccessToken));
-        }
-      }
-    } catch (error) {
-      console.error('getRedirectResult error:', error);
+  // 1. Check window.location.hash for web OAuth redirects
+  if (typeof window !== 'undefined' && window.location.hash && window.location.hash.includes('access_token=')) {
+    const params = new URLSearchParams(window.location.hash.substring(1));
+    const token = params.get('access_token');
+    if (token) {
+      await setCachedAccessToken(token);
+      window.history.replaceState(null, '', window.location.pathname);
+      return;
     }
+  }
+
+  // 2. Check Firebase Redirect result for native/web
+  try {
+    const result = await getRedirectResult(auth);
+    if (result) {
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      if (credential?.accessToken) {
+        await setCachedAccessToken(credential.accessToken);
+      }
+    }
+  } catch (error) {
+    console.error('getRedirectResult error:', error);
   }
 };
 
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
-  try {
-    isSigningIn = true;
+  isSigningIn = true;
 
-    if (Capacitor.isNativePlatform()) {
+  const clientId = firebaseConfig.oAuthClientId || '832891644845-1p2fddt518q3s6c2lan134plq9tkjiqj.apps.googleusercontent.com';
+
+  // 1. On Capacitor Native Platform (Android / iOS app)
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const redirectUri = 'com.nafeesjewellers.app://oauth';
+      const scope = encodeURIComponent('https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile');
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${scope}&prompt=consent`;
+
+      await Browser.open({ url: authUrl });
+
+      return new Promise((resolve) => {
+        nativeResolve = resolve;
+        setTimeout(() => {
+          if (nativeResolve) {
+            nativeResolve(null);
+            nativeResolve = null;
+            isSigningIn = false;
+          }
+        }, 120000);
+      });
+    } catch (nativeErr) {
+      console.warn('Native Browser OAuth failed, attempting signInWithRedirect:', nativeErr);
       await signInWithRedirect(auth, provider);
-      
       return new Promise((resolve) => {
         nativeResolve = resolve;
       });
-    } else {
-      const result = await signInWithPopup(auth, provider);
-      const credential = GoogleAuthProvider.credentialFromResult(result);
-      if (!credential?.accessToken) {
-        throw new Error('Failed to get access token from Google Auth');
-      }
+    }
+  }
 
-      cachedAccessToken = credential.accessToken;
-      isDriveConnected = true;
-      
-      // Save to settings that Google Drive backup is enabled
-      await db.settings.put({ key: 'googleDriveConnected', value: 'true' });
-      
-      onAuthChangedListeners.forEach(listener => listener(result.user, cachedAccessToken));
-      return { user: result.user, accessToken: cachedAccessToken };
+  // 2. On Web / Desktop / Electron
+  try {
+    const result = await signInWithPopup(auth, provider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    if (!credential?.accessToken) {
+      throw new Error('Failed to get access token from Google Auth');
     }
+
+    const authRes = await setCachedAccessToken(credential.accessToken);
+    return authRes;
   } catch (error: any) {
-    const isPopupClosed = error && (
-      error.code === 'auth/popup-closed-by-user' || 
-      error.code === 'auth/cancelled-popup-request' ||
-      error.message?.includes('popup-closed-by-user') ||
-      error.message?.includes('cancelled-popup-request')
-    );
-    if (isPopupClosed) {
-      console.warn('Google Sign-In popup was closed or cancelled by the user/browser.');
+    console.warn('signInWithPopup failed or was blocked, trying Google OAuth popup fallback:', error);
+
+    const redirectUri = window.location.origin + window.location.pathname;
+    const scope = encodeURIComponent('https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile');
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${scope}&prompt=consent`;
+
+    const popupWin = window.open(authUrl, 'google_drive_oauth', 'width=520,height=650,left=100,top=100');
+    if (popupWin && !popupWin.closed) {
+      return new Promise((resolve) => {
+        const interval = setInterval(async () => {
+          try {
+            if (popupWin.closed) {
+              clearInterval(interval);
+              isSigningIn = false;
+              resolve(null);
+              return;
+            }
+            if (popupWin.location.hash && popupWin.location.hash.includes('access_token=')) {
+              const hashParams = new URLSearchParams(popupWin.location.hash.substring(1));
+              const token = hashParams.get('access_token');
+              clearInterval(interval);
+              popupWin.close();
+              if (token) {
+                const res = await setCachedAccessToken(token);
+                resolve(res);
+              } else {
+                resolve(null);
+              }
+            }
+          } catch (e) {
+            // Cross-origin restriction while popup is on google.com - ignore
+          }
+        }, 500);
+      });
     } else {
-      console.error('Google Sign-In error:', error);
+      // Popup completely blocked, fallback to full page redirect
+      window.location.href = authUrl;
+      return null;
     }
-    throw error;
   } finally {
-    if (!Capacitor.isNativePlatform()) {
-      isSigningIn = false;
-    }
+    isSigningIn = false;
   }
 };
 
 export const getAccessToken = (): string | null => {
-  return cachedAccessToken;
+  return cachedAccessToken || localStorage.getItem('google_drive_access_token');
 };
 
 export const ensureAccessToken = async (): Promise<string | null> => {
-  if (cachedAccessToken) return cachedAccessToken;
+  let token = getAccessToken();
+  if (token) return token;
+
+  const saved = await db.settings.get('googleDriveAccessToken');
+  if (saved?.value) {
+    cachedAccessToken = saved.value;
+    isDriveConnected = true;
+    return saved.value;
+  }
+
   try {
     const res = await googleSignIn();
     return res?.accessToken || null;
@@ -172,22 +286,24 @@ export const ensureAccessToken = async (): Promise<string | null> => {
 };
 
 export const logoutGoogleDrive = async () => {
-  await auth.signOut();
+  try {
+    await auth.signOut();
+  } catch (e) {}
   cachedAccessToken = null;
   isDriveConnected = false;
+  localStorage.removeItem('google_drive_access_token');
   await db.settings.put({ key: 'googleDriveConnected', value: 'false' });
+  await db.settings.put({ key: 'googleDriveAccessToken', value: '' });
   onAuthChangedListeners.forEach(listener => listener(null, null));
 };
 
-// Check if drive is connected
 export const isGoogleDriveEnabled = async (): Promise<boolean> => {
-  const setting = await db.settings.get('googleDriveConnected');
-  return setting?.value === 'true' && !!cachedAccessToken;
+  const token = getAccessToken();
+  return !!token;
 };
 
 /**
  * Searches for the backup file in Google Drive.
- * Returns file details (id, modifiedTime) if found, otherwise null.
  */
 export const findBackupOnDrive = async (token: string): Promise<{ id: string; name: string; modifiedTime: string } | null> => {
   try {
@@ -316,7 +432,10 @@ export const uploadBackupToDrive = async (token: string, backupData: any): Promi
  * Performs full database backup and uploads it to Google Drive.
  */
 export const autoBackupToDrive = async (): Promise<boolean> => {
-  const token = getAccessToken();
+  let token = getAccessToken();
+  if (!token) {
+    token = await ensureAccessToken();
+  }
   if (!token) return false;
 
   try {
@@ -327,7 +446,9 @@ export const autoBackupToDrive = async (): Promise<boolean> => {
     const stock = await db.stock.toArray();
     const settings = await db.settings.toArray();
     const goldPurchases = await db.goldPurchases.toArray();
-    const expenses = await db.expenses.toArray();
+    const expenses = db.expenses ? await db.expenses.toArray() : [];
+    const khaataAccounts = db.khaataAccounts ? await db.khaataAccounts.toArray() : [];
+    const khaataEntries = db.khaataEntries ? await db.khaataEntries.toArray() : [];
 
     const data = { 
       sales, 
@@ -337,7 +458,9 @@ export const autoBackupToDrive = async (): Promise<boolean> => {
       stock, 
       settings, 
       goldPurchases,
-      expenses 
+      expenses,
+      khaataAccounts,
+      khaataEntries
     };
 
     const success = await uploadBackupToDrive(token, data);
@@ -366,12 +489,20 @@ export const triggerAutoBackup = () => {
     autoBackupToDrive().catch(err => {
       console.error('Background auto-backup failed:', err);
     });
-  }, 4000); // Wait 4 seconds of idle time before uploading
+  }, 5000); // Wait 5 seconds of idle time before uploading
 };
 
 // Setup hooks for auto-backup
+let isHooksRegistered = false;
 export const registerBackupHooks = () => {
-  const hookTrigger = () => triggerAutoBackup();
+  if (isHooksRegistered) return;
+  isHooksRegistered = true;
+
+  const hookTrigger = () => {
+    setTimeout(() => {
+      triggerAutoBackup();
+    }, 0);
+  };
 
   db.sales.hook('creating', hookTrigger);
   db.sales.hook('updating', hookTrigger);
@@ -397,7 +528,21 @@ export const registerBackupHooks = () => {
   db.goldPurchases.hook('updating', hookTrigger);
   db.goldPurchases.hook('deleting', hookTrigger);
 
-  db.expenses.hook('creating', hookTrigger);
-  db.expenses.hook('updating', hookTrigger);
-  db.expenses.hook('deleting', hookTrigger);
+  if (db.expenses) {
+    db.expenses.hook('creating', hookTrigger);
+    db.expenses.hook('updating', hookTrigger);
+    db.expenses.hook('deleting', hookTrigger);
+  }
+
+  if (db.khaataAccounts) {
+    db.khaataAccounts.hook('creating', hookTrigger);
+    db.khaataAccounts.hook('updating', hookTrigger);
+    db.khaataAccounts.hook('deleting', hookTrigger);
+  }
+
+  if (db.khaataEntries) {
+    db.khaataEntries.hook('creating', hookTrigger);
+    db.khaataEntries.hook('updating', hookTrigger);
+    db.khaataEntries.hook('deleting', hookTrigger);
+  }
 };

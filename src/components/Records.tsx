@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Sale, type GoldPurchase } from '../db';
 import { translations, type Language } from '../translations';
@@ -155,36 +155,36 @@ export default function Records({ lang, setActiveSection, setEditingSale }: Reco
     }
   };
 
-  const sales = useLiveQuery(() => {
+  const rawSales = useLiveQuery(() => {
     if (!db.sales) return Promise.resolve([]);
-    if (!searchTerm) return db.sales.orderBy('id').reverse().toArray();
-    
-    const term = searchTerm.toLowerCase();
-    return db.sales
-      .filter(sale => 
-        sale.name.toLowerCase().includes(term) || 
-        sale.phone.includes(searchTerm) ||
-        sale.id?.toString() === searchTerm ||
-        sale.items.some(item => item.n.toLowerCase().includes(term))
-      )
-      .reverse()
-      .toArray();
-  }, [searchTerm]);
+    return db.sales.orderBy('id').reverse().toArray();
+  }) || [];
 
-  const purchases = useLiveQuery(() => {
+  const rawPurchases = useLiveQuery(() => {
     if (!db.goldPurchases) return Promise.resolve([]);
-    if (!searchTerm) return db.goldPurchases.orderBy('id').reverse().toArray();
-    
+    return db.goldPurchases.orderBy('id').reverse().toArray();
+  }) || [];
+
+  const sales = useMemo(() => {
+    if (!searchTerm.trim()) return rawSales;
     const term = searchTerm.toLowerCase();
-    return db.goldPurchases
-      .filter(p => 
-        p.name.toLowerCase().includes(term) || 
-        p.phone.includes(searchTerm) ||
-        p.id?.toString() === searchTerm
-      )
-      .reverse()
-      .toArray();
-  }, [searchTerm]);
+    return rawSales.filter(sale => 
+      sale.name.toLowerCase().includes(term) || 
+      sale.phone.includes(searchTerm) ||
+      sale.id?.toString() === searchTerm ||
+      sale.items.some(item => item.n.toLowerCase().includes(term))
+    );
+  }, [rawSales, searchTerm]);
+
+  const purchases = useMemo(() => {
+    if (!searchTerm.trim()) return rawPurchases;
+    const term = searchTerm.toLowerCase();
+    return rawPurchases.filter(p => 
+      p.name.toLowerCase().includes(term) || 
+      p.phone.includes(searchTerm) ||
+      p.id?.toString() === searchTerm
+    );
+  }, [rawPurchases, searchTerm]);
 
   const handleDelete = async () => {
     if (!deleteId) return;

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Repair } from '../db';
 import { translations, type Language } from '../translations';
@@ -159,22 +159,22 @@ export default function Repairs({ lang }: RepairsProps) {
   };
 
   const [searchTerm, setSearchTerm] = useState('');
-  const repairs = useLiveQuery(() => {
+  const rawRepairs = useLiveQuery(() => {
     if (!db.repairs) return Promise.resolve([]);
-    if (!searchTerm) return db.repairs.orderBy('date').reverse().toArray();
-    
+    return db.repairs.orderBy('date').reverse().toArray();
+  }) || [];
+
+  const repairs = useMemo(() => {
+    if (!searchTerm.trim()) return rawRepairs;
     const term = searchTerm.toLowerCase();
-    return db.repairs
-      .filter(r => 
-        r.customerName.toLowerCase().includes(term) || 
-        r.customerPhone.includes(searchTerm) ||
-        r.issue.toLowerCase().includes(term) ||
-        r.item.toLowerCase().includes(term) ||
-        r.id?.toString() === searchTerm
-      )
-      .reverse()
-      .toArray();
-  }, [searchTerm]);
+    return rawRepairs.filter(r => 
+      r.customerName.toLowerCase().includes(term) || 
+      r.customerPhone.includes(searchTerm) ||
+      r.issue.toLowerCase().includes(term) ||
+      r.item.toLowerCase().includes(term) ||
+      r.id?.toString() === searchTerm
+    );
+  }, [rawRepairs, searchTerm]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

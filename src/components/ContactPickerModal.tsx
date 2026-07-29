@@ -172,15 +172,64 @@ export default function ContactPickerModal({ isOpen, onClose, onSelect, lang }: 
   }, [isOpen, isUrdu]);
 
   const cleanPhoneNumber = (rawPhone: string): string => {
+    if (!rawPhone) return '';
     let clean = rawPhone.replace(/\s+/g, '').replace(/[-()]/g, '');
     if (clean.startsWith('+92')) {
       clean = '0' + clean.substring(3);
     } else if (clean.startsWith('0092')) {
       clean = '0' + clean.substring(4);
-    } else if (clean.startsWith('92')) {
+    } else if (clean.startsWith('92') && clean.length >= 11) {
       clean = '0' + clean.substring(2);
     }
     return clean;
+  };
+
+  const extractNameFromDevice = (c: any): string => {
+    if (!c) return '';
+    if (typeof c === 'string') return c;
+    if (Array.isArray(c.name) && c.name.length > 0) {
+      const n0 = c.name[0];
+      return (typeof n0 === 'string' ? n0 : (n0?.display || n0?.displayName || '')) || '';
+    }
+    if (typeof c.name === 'string') return c.name;
+    if (c.name && typeof c.name === 'object') {
+      if (c.name.display) return c.name.display;
+      if (c.name.displayName) return c.name.displayName;
+      const given = c.name.given || c.name.givenName || '';
+      const family = c.name.family || c.name.familyName || '';
+      if (given || family) return `${given} ${family}`.trim();
+    }
+    if (c.displayName && typeof c.displayName === 'string') return c.displayName;
+    return '';
+  };
+
+  const extractPhoneFromDevice = (c: any): string => {
+    if (!c) return '';
+    if (typeof c === 'string') return c;
+
+    if (Array.isArray(c.tel) && c.tel.length > 0) {
+      const t0 = c.tel[0];
+      return typeof t0 === 'string' ? t0 : (t0?.number || t0?.value || '');
+    }
+    if (typeof c.tel === 'string') return c.tel;
+
+    if (Array.isArray(c.phones) && c.phones.length > 0) {
+      const p0 = c.phones[0];
+      if (typeof p0 === 'string') return p0;
+      if (p0 && typeof p0 === 'object') {
+        return p0.number || p0.value || p0.phoneNumber || p0.phone || '';
+      }
+    }
+    if (typeof c.phones === 'string') return c.phones;
+
+    if (c.phone) {
+      if (typeof c.phone === 'string') return c.phone;
+      if (typeof c.phone === 'object') return c.phone.number || c.phone.value || '';
+    }
+    if (typeof c.number === 'string') return c.number;
+    if (typeof c.value === 'string') return c.value;
+
+    return '';
   };
 
   const selectDeviceContact = async () => {
@@ -197,26 +246,22 @@ export default function ContactPickerModal({ isOpen, onClose, onSelect, lang }: 
           });
           
           if (result && result.contact) {
-            const c = result.contact;
-            const rawName = (c.name as any)?.display || (c as any).displayName || '';
-            const rawPhone = c.phones && c.phones[0] && c.phones[0].number
-              ? c.phones[0].number
-              : '';
+            const rawName = extractNameFromDevice(result.contact);
+            const rawPhone = extractPhoneFromDevice(result.contact);
 
-            if (rawName && rawPhone) {
+            if (rawPhone) {
               const formattedPhone = cleanPhoneNumber(rawPhone);
+              const formattedName = rawName.trim() || (isUrdu ? `رابطہ ${formattedPhone}` : `Contact ${formattedPhone}`);
               
-              // Add to local database history so it shows up in Browse
               const existing = await db.contacts.where({ phone: formattedPhone }).first();
               if (!existing) {
                 await db.contacts.add({
-                  name: rawName,
+                  name: formattedName,
                   phone: formattedPhone
                 });
               }
 
-              // Instantly select the picked contact and close the picker
-              onSelect({ name: rawName, phone: formattedPhone });
+              onSelect({ name: formattedName, phone: formattedPhone });
               onClose();
               return;
             } else {
@@ -227,9 +272,8 @@ export default function ContactPickerModal({ isOpen, onClose, onSelect, lang }: 
             }
           }
         } catch (pickErr: any) {
-          console.warn('pickContact failed, falling back to bulk getContacts:', pickErr);
+          console.warn('pickContact failed, falling back to getContacts:', pickErr);
           
-          // Request permissions for bulk fetch fallback
           const permission = await Contacts.requestPermissions();
           if (permission.contacts !== 'granted') {
             alert(isUrdu 
@@ -251,17 +295,16 @@ export default function ContactPickerModal({ isOpen, onClose, onSelect, lang }: 
             let importedCount = 0;
             
             for (const deviceContact of result.contacts) {
-              const rawName = (deviceContact.name as any)?.display || (deviceContact as any).displayName || '';
-              const rawPhone = deviceContact.phones && deviceContact.phones[0] && deviceContact.phones[0].number
-                ? deviceContact.phones[0].number
-                : '';
+              const rawName = extractNameFromDevice(deviceContact);
+              const rawPhone = extractPhoneFromDevice(deviceContact);
               
-              if (rawName && rawPhone) {
+              if (rawPhone) {
                 const formattedPhone = cleanPhoneNumber(rawPhone);
+                const formattedName = rawName.trim() || (isUrdu ? `رابطہ ${formattedPhone}` : `Contact ${formattedPhone}`);
                 const existing = await db.contacts.where({ phone: formattedPhone }).first();
                 if (!existing) {
                   await db.contacts.add({
-                    name: rawName,
+                    name: formattedName,
                     phone: formattedPhone
                   });
                   importedCount++;
@@ -289,43 +332,62 @@ export default function ContactPickerModal({ isOpen, onClose, onSelect, lang }: 
       } else if (typeof navigator !== 'undefined' && 'contacts' in navigator && 'select' in (navigator as any).contacts) {
         if (isIframe) {
           alert(isUrdu
-            ? 'پیش نظارہ (Iframe) کی وجہ سے براہ راست رابطوں تک رسائی بلاک ہے۔ براہ کرم اوپر دائیں کونے میں موجود "Open in New Tab" بٹن پر کلک کر کے ایپ کو نئے ٹیب میں کھولیں، یا VCF طریقہ استعمال کریں۔'
-            : 'Direct contact picker is blocked because the app is running in a preview window (iframe). Please click the "Open in New Tab" button in the top-right corner to open the app directly and use this feature, or try importing via a VCF file.'
+            ? 'پیش نظارہ (Iframe) کے اندر براؤزر نے فون کے رابطوں تک رسائی کی اجازت نہیں دی۔ براہ کرم ایپ کو اوپر دائیں جانب "Open in New Tab" میں کھولیں، یا VCF/ٹیکسٹ کا طریقہ استعمال کریں۔'
+            : 'Direct contact picker is restricted inside the preview iframe. Please click "Open in New Tab" at the top-right to use phone contacts directly, or use VCF import.'
           );
           setLoading(false);
           return;
         }
 
-        const props = ['name', 'tel'];
-        const opts = { multiple: false };
-        const selected = await (navigator as any).contacts.select(props, opts);
-        
-        if (selected && selected.length > 0) {
-          const deviceContact = selected[0];
-          const rawName = deviceContact.name && deviceContact.name[0] ? deviceContact.name[0] : '';
-          const rawPhone = deviceContact.tel && deviceContact.tel[0] ? deviceContact.tel[0] : '';
+        try {
+          const props = ['name', 'tel'];
+          const opts = { multiple: false };
+          const selected = await (navigator as any).contacts.select(props, opts);
           
-          if (rawName && rawPhone) {
-            const formattedPhone = cleanPhoneNumber(rawPhone);
+          if (selected && selected.length > 0) {
+            const rawName = extractNameFromDevice(selected[0]);
+            const rawPhone = extractPhoneFromDevice(selected[0]);
             
-            // Add to database
-            const existing = await db.contacts.where({ phone: formattedPhone }).first();
-            if (!existing) {
-              await db.contacts.add({
-                name: rawName,
-                phone: formattedPhone
-              });
-            }
+            if (rawPhone) {
+              const formattedPhone = cleanPhoneNumber(rawPhone);
+              const formattedName = rawName.trim() || (isUrdu ? `رابطہ ${formattedPhone}` : `Contact ${formattedPhone}`);
+              
+              const existing = await db.contacts.where({ phone: formattedPhone }).first();
+              if (!existing) {
+                await db.contacts.add({
+                  name: formattedName,
+                  phone: formattedPhone
+                });
+              }
 
-            // Instantly select the picked contact and close the picker
-            onSelect({ name: rawName, phone: formattedPhone });
-            onClose();
+              onSelect({ name: formattedName, phone: formattedPhone });
+              onClose();
+              return;
+            } else {
+              alert(isUrdu 
+                ? 'منتخب کردہ رابطے میں درست فون نمبر نہیں ملا۔' 
+                : 'Selected contact does not have a valid phone number.'
+              );
+            }
+          }
+        } catch (webErr: any) {
+          console.error('navigator.contacts.select failed:', webErr);
+          if (webErr?.name === 'SecurityError' || webErr?.message?.includes('disallowed') || webErr?.message?.includes('iframe')) {
+            alert(isUrdu
+              ? 'پیش نظارہ کے اندر براؤزر سیکیورٹی نے رابطوں کو روک دیا۔ براہ کرم ایپ کو "Open in New Tab" میں کھولیں یا VCF درآمد استعمال کریں۔'
+              : 'Browser security restricted contact picker inside iframe preview. Please open the app in a new tab or use VCF import.'
+            );
+          } else {
+            alert(isUrdu 
+              ? 'موبائل رابطوں کا انتخاب منسوخ کر دیا گیا یا براؤزر سپورٹ میں بلاک آیا۔' 
+              : 'Contact selection was cancelled or blocked by browser.'
+            );
           }
         }
       } else {
         alert(isUrdu 
-          ? 'موبائل رابطوں تک رسائی ناکام رہی۔ براہ کرم VCF فائل درآمد کرنے کا طریقہ آزمائیں۔' 
-          : 'Failed to access device contacts. Please try importing via a VCF file.'
+          ? 'آپ کا موجودہ ڈیسک ٹاپ/براؤزر براہ راست رابطہ فہرست کے لیے VCF فائل کا طریقہ تجویز کرتا ہے۔ براہ کرم "درآمد (VCF/متن)" ٹیب پر جائیں!' 
+          : 'Direct contact picking requires a supported mobile browser or App. Please use the VCF Import tab!'
         );
       }
     } catch (err) {
@@ -586,16 +648,28 @@ export default function ContactPickerModal({ isOpen, onClose, onSelect, lang }: 
             {/* TAB 1: BROWSE AND SEARCH */}
             {activeTab === 'browse' && (
               <>
-                <div className="p-6 pb-2">
-                  <div className="relative">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
-                    <input
-                      type="text"
-                      placeholder={isUrdu ? 'نام یا فون نمبر تلاش کریں...' : 'Search by name or phone...'}
-                      value={searchTerm}
-                      onChange={e => setSearchTerm(e.target.value)}
-                      className="w-full pl-11 pr-5 py-3.5 bg-sky-50 border border-sky-100 rounded-2xl focus:ring-2 focus:ring-gold focus:bg-white outline-none transition-all text-sm font-medium text-black"
-                    />
+                <div className="p-6 pb-2 space-y-3">
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
+                      <input
+                        type="text"
+                        placeholder={isUrdu ? 'نام یا فون نمبر تلاش کریں...' : 'Search by name or phone...'}
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        className="w-full pl-11 pr-5 py-3.5 bg-sky-50 border border-sky-100 rounded-2xl focus:ring-2 focus:ring-gold focus:bg-white outline-none transition-all text-sm font-medium text-black"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={selectDeviceContact}
+                      disabled={loading}
+                      className="px-4 py-3.5 bg-gold hover:bg-gold-dark text-white font-extrabold text-xs md:text-sm rounded-2xl flex items-center gap-2 transition-all shadow-sm shrink-0 cursor-pointer disabled:opacity-50"
+                      title={isUrdu ? 'موبائل کنٹیکٹ لسٹ کھولیں' : 'Open Mobile Contact List'}
+                    >
+                      <Smartphone size={18} />
+                      <span className="hidden sm:inline urdu-text">{isUrdu ? 'موبائل رابطہ' : 'Fetch Mobile'}</span>
+                    </button>
                   </div>
                 </div>
 
@@ -705,32 +779,25 @@ export default function ContactPickerModal({ isOpen, onClose, onSelect, lang }: 
                   </div>
                 </div>
 
-                <div className="pt-6 border-t border-sky-50">
-                  {deviceApiSupported ? (
-                    <button
-                      onClick={selectDeviceContact}
-                      className="w-full flex items-center justify-center gap-2.5 px-6 py-4 rounded-2xl bg-gold hover:bg-gold-dark text-white font-extrabold text-base transition-all shadow-md hover:shadow-lg cursor-pointer"
-                    >
-                      <Smartphone size={20} />
-                      <span className="urdu-text">
-                        {isUrdu ? 'فون کے رابطے منتخب کریں' : 'Open System Contact Book'}
-                      </span>
-                    </button>
-                  ) : (
-                    <div className="space-y-3">
-                      <div className="text-center py-4 text-xs font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded-xl urdu-text">
-                        {isUrdu 
-                          ? 'آپ کا موجودہ براؤزر براہ راست رابطوں تک رسائی کی اجازت نہیں دیتا۔ براہ کرم VCF درآمد آزمائیں!'
-                          : 'Your current browser or layout does not support direct contact access. Please use the VCF Import tab instead!'}
-                      </div>
-                      <button
-                        onClick={() => setActiveTab('import')}
-                        className="w-full py-3 bg-sky-100 hover:bg-sky-200 text-sky-800 font-extrabold text-sm rounded-xl transition-all urdu-text"
-                      >
-                        {isUrdu ? 'VCF فائل درآمد کرنے پر جائیں' : 'Go to VCF / Text Import'}
-                      </button>
-                    </div>
-                  )}
+                <div className="pt-6 border-t border-sky-50 space-y-3">
+                  <button
+                    onClick={selectDeviceContact}
+                    disabled={loading}
+                    className="w-full flex items-center justify-center gap-2.5 px-6 py-4 rounded-2xl bg-gold hover:bg-gold-dark text-white font-extrabold text-base transition-all shadow-md hover:shadow-lg cursor-pointer disabled:opacity-50"
+                  >
+                    <Smartphone size={20} />
+                    <span className="urdu-text">
+                      {isUrdu ? 'فون کے رابطے منتخب کریں' : 'Open System Contact Book'}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveTab('import')}
+                    className="w-full py-3 bg-sky-50 hover:bg-sky-100 text-sky-800 font-bold text-xs md:text-sm rounded-2xl transition-all urdu-text border border-sky-100 flex items-center justify-center gap-2"
+                  >
+                    <Upload size={16} />
+                    <span>{isUrdu ? 'یا VCF / ٹیکسٹ کاپی پیسٹ درآمد استعمال کریں' : 'Or Use VCF / Text Paste Import'}</span>
+                  </button>
                 </div>
               </div>
             )}
