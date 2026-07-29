@@ -176,17 +176,22 @@ export const handleAuthRedirectResult = async () => {
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
   isSigningIn = true;
 
-  const clientId = firebaseConfig.oAuthClientId || '832891644845-1p2fddt518q3s6c2lan134plq9tkjiqj.apps.googleusercontent.com';
+  // 1. First attempt standard Firebase Auth popup (works on Web & modern Capacitor WebViews)
+  try {
+    const result = await signInWithPopup(auth, provider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    if (credential?.accessToken) {
+      const authRes = await setCachedAccessToken(credential.accessToken);
+      return authRes;
+    }
+  } catch (popupErr: any) {
+    console.warn('signInWithPopup failed or was blocked, attempting fallback:', popupErr);
+  }
 
-  // 1. On Capacitor Native Platform (Android / iOS app)
+  // 2. Fallback: If on Capacitor Native Platform, use Firebase Auth redirect flow
   if (Capacitor.isNativePlatform()) {
     try {
-      const redirectUri = 'com.nafeesjewellers.app://oauth';
-      const scope = encodeURIComponent('https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile');
-      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${scope}&prompt=consent`;
-
-      await Browser.open({ url: authUrl });
-
+      await signInWithRedirect(auth, provider);
       return new Promise((resolve) => {
         nativeResolve = resolve;
         setTimeout(() => {
@@ -197,28 +202,14 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
           }
         }, 120000);
       });
-    } catch (nativeErr) {
-      console.warn('Native Browser OAuth failed, attempting signInWithRedirect:', nativeErr);
-      await signInWithRedirect(auth, provider);
-      return new Promise((resolve) => {
-        nativeResolve = resolve;
-      });
+    } catch (redirectErr) {
+      console.warn('signInWithRedirect failed on native platform:', redirectErr);
     }
   }
 
-  // 2. On Web / Desktop / Electron
+  // 3. Web & Desktop Fallback: OAuth 2.0 Implicit Flow using valid current HTTPS origin
   try {
-    const result = await signInWithPopup(auth, provider);
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    if (!credential?.accessToken) {
-      throw new Error('Failed to get access token from Google Auth');
-    }
-
-    const authRes = await setCachedAccessToken(credential.accessToken);
-    return authRes;
-  } catch (error: any) {
-    console.warn('signInWithPopup failed or was blocked, trying Google OAuth popup fallback:', error);
-
+    const clientId = firebaseConfig.oAuthClientId || '832891644845-1p2fddt518q3s6c2lan134plq9tkjiqj.apps.googleusercontent.com';
     const redirectUri = window.location.origin + window.location.pathname;
     const scope = encodeURIComponent('https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile');
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${scope}&prompt=consent`;
@@ -256,6 +247,9 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
       window.location.href = authUrl;
       return null;
     }
+  } catch (error: any) {
+    console.error('Google OAuth sign-in completely failed:', error);
+    return null;
   } finally {
     isSigningIn = false;
   }
