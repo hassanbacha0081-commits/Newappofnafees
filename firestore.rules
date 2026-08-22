@@ -1,0 +1,20 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Allow read/write for all authenticated business users under the shop structure
+    // For single-shop / multi-user tenancy:
+    match /shops/{shopId}/{collection}/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Direct root collections fallback for seamless ERP sync
+    match /{collection}/{docId} {
+      allow read, write: if isAuthenticated();
+    }
+  }
+}

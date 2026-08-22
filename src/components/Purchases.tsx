@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { db, type GoldPurchase } from '../db';
 import { translations, type Language } from '../translations';
-import { Save, Printer, Camera, RotateCcw, Users } from 'lucide-react';
+import { Save, Printer, Camera, RotateCcw, Users, MessageCircle } from 'lucide-react';
+import { shareImageToWhatsApp } from '../lib/utils';
 import { useReactToPrint } from 'react-to-print';
 import { PrintReceipt } from './PrintReceipt';
 import { html2canvasWithOklch as html2canvas } from '../lib/html2canvas-helper';
@@ -21,7 +22,7 @@ export default function Purchases({ lang }: PurchasesProps) {
   const isUrdu = lang === 'ur';
 
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [lightboxData, setLightboxData] = useState<{ src: string; title?: string; phone?: string; caption?: string } | null>(null);
   const [isContactPickerOpen, setIsContactPickerOpen] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -333,11 +334,33 @@ export default function Purchases({ lang }: PurchasesProps) {
                   </button>
                   {img && (
                     <div 
-                      onClick={() => setLightboxImage(img)}
+                      onClick={() => setLightboxData({
+                        src: img,
+                        title: name ? `${name} - ${isUrdu ? 'خریداری' : 'Purchase'}` : (isUrdu ? 'خریداری تصویر' : 'Purchase Image'),
+                        phone: phone,
+                        caption: `*نفیس جیولرز - سونا خریداری رسید*\nبیچنے والے کا نام: ${name || '-'}\nفون: ${phone || '-'}\nوزن: ${weight || 0}g\nریٹ: Rs. ${rate || 0}\nکل رقم: Rs. ${calculateTotal().toLocaleString()}`
+                      })}
                       className="h-52 flex-1 rounded-3xl bg-sky-50 overflow-hidden border border-sky-100 shadow-inner group relative cursor-pointer"
                       title={isUrdu ? 'بڑی تصویر دیکھیں' : 'View Large Image'}
                     >
                       <img src={img} alt="Gold Image" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 hover:opacity-95" />
+                      <button
+                        type="button"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          await shareImageToWhatsApp({
+                            imageSrc: img,
+                            phone: phone,
+                            caption: `*نفیس جیولرز - سونا خریداری رسید*\nبیچنے والے کا نام: ${name || '-'}\nفون: ${phone || '-'}\nوزن: ${weight || 0}g\nریٹ: Rs. ${rate || 0}\nکل رقم: Rs. ${calculateTotal().toLocaleString()}`,
+                            title: `Gold Purchase - ${name}`
+                          });
+                        }}
+                        className="absolute bottom-3 right-3 p-2.5 bg-green-600 hover:bg-green-700 text-white rounded-full shadow-lg transition-colors flex items-center gap-1.5 font-bold text-xs"
+                        title="Share on WhatsApp"
+                      >
+                        <MessageCircle size={16} />
+                        <span className="urdu-text">{isUrdu ? 'واٹس ایپ تصویر' : 'WhatsApp'}</span>
+                      </button>
                     </div>
                   )}
                   <input 
@@ -449,8 +472,14 @@ export default function Purchases({ lang }: PurchasesProps) {
         }}
         lang={lang}
       />
-      {lightboxImage && (
-        <ImageLightbox src={lightboxImage} onClose={() => setLightboxImage(null)} title={lang === 'ur' ? 'خریداری کی تصویر' : 'Purchase Image'} />
+      {lightboxData && (
+        <ImageLightbox 
+          src={lightboxData.src} 
+          onClose={() => setLightboxData(null)} 
+          title={lightboxData.title || (lang === 'ur' ? 'خریداری کی تصویر' : 'Purchase Image')} 
+          phone={lightboxData.phone}
+          caption={lightboxData.caption}
+        />
       )}
     </div>
   );

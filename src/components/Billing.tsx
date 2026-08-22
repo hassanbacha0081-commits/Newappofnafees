@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db, type Sale, type SalesItem } from '../db';
 import { translations, type Language } from '../translations';
-import { formatDate, compressImage } from '../lib/utils';
-import { Camera, RotateCcw, Trash2, Printer, Plus, X, ShoppingBag, Download, AlertCircle, CheckCircle2, Users, ImageIcon } from 'lucide-react';
+import { formatDate, compressImage, shareImageToWhatsApp } from '../lib/utils';
+import { Camera, RotateCcw, Trash2, Printer, Plus, X, ShoppingBag, Download, AlertCircle, CheckCircle2, Users, ImageIcon, MessageCircle, Eye } from 'lucide-react';
 import { useReactToPrint } from 'react-to-print';
 import { AnimatePresence, motion } from 'motion/react';
 import { html2canvasWithOklch as html2canvas } from '../lib/html2canvas-helper';
@@ -26,7 +26,7 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
   const t = translations[lang];
   const [billItems, setBillItems] = useState<SalesItem[]>([]);
   const [lastImg, setLastImg] = useState<string | null>(null);
-  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [lightboxData, setLightboxData] = useState<{ src: string; title?: string; phone?: string; caption?: string } | null>(null);
   const [isContactPickerOpen, setIsContactPickerOpen] = useState(false);
   
   const [formData, setFormData] = useState({
@@ -701,14 +701,41 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
                 </div>
 
                 {lastImg && (
-                  <div className="relative w-full sm:w-40 h-40 rounded-3xl overflow-hidden border border-sky-200 shadow-xl animate-in zoom-in-95 duration-500 group cursor-pointer" onClick={() => setLightboxImage(lastImg)}>
+                  <div 
+                    className="relative w-full sm:w-40 h-40 rounded-3xl overflow-hidden border border-sky-200 shadow-xl animate-in zoom-in-95 duration-500 group cursor-pointer" 
+                    onClick={() => setLightboxData({
+                      src: lastImg,
+                      title: formData.iName || (lang === 'ur' ? 'بل آئٹم تصویر' : 'Invoice Item Image'),
+                      phone: formData.cPhone,
+                      caption: `*نفیس جیولرز - بل آئٹم*\nکسٹمر: ${formData.cName || '-'}\nآئٹم: ${formData.iName || '-'}\nوزن: ${formData.iWt || 0}g`
+                    })}
+                  >
                     <img src={lastImg} alt="Preview" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); setLastImg(null); }}
-                      className="absolute top-3 right-3 p-2 bg-red-600 text-white rounded-xl shadow-lg hover:bg-red-700 transition-colors z-10"
-                    >
-                      <X size={18} />
-                    </button>
+                    <div className="absolute top-3 right-3 flex gap-1 z-10">
+                      <button 
+                        type="button"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          await shareImageToWhatsApp({
+                            imageSrc: lastImg,
+                            phone: formData.cPhone,
+                            caption: `*نفیس جیولرز - بل آئٹم*\nکسٹمر: ${formData.cName || '-'}\nآئٹم: ${formData.iName || '-'}\nوزن: ${formData.iWt || 0}g`,
+                            title: 'Invoice Item Pic'
+                          });
+                        }}
+                        className="p-1.5 bg-green-600 text-white rounded-xl shadow-lg hover:bg-green-700 transition-colors"
+                        title="WhatsApp Photo"
+                      >
+                        <MessageCircle size={15} />
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setLastImg(null); }}
+                        className="p-1.5 bg-red-600 text-white rounded-xl shadow-lg hover:bg-red-700 transition-colors"
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
                     <div className="absolute inset-0 bg-sky-900/10 group-hover:bg-transparent transition-colors"></div>
                   </div>
                 )}
@@ -743,12 +770,35 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
                     {item.t < 0 && <div className="absolute top-0 right-0 bg-red-500 text-[8px] text-white px-2 py-0.5 rounded-bl font-black uppercase tracking-tighter">RETURN</div>}
                     <div className="flex gap-4">
                       {item.img && (
-                        <div 
-                          onClick={() => setLightboxImage(item.img!)}
-                          className="w-14 h-14 rounded-xl overflow-hidden border border-sky-100 flex-shrink-0 shadow-sm cursor-pointer hover:border-gold duration-200 transition-colors"
-                          title={lang === 'ur' ? 'تصویر دیکھیں' : 'View Image'}
-                        >
-                          <img src={item.img} alt={item.n} className="w-full h-full object-cover" />
+                        <div className="relative group/img flex-shrink-0">
+                          <div 
+                            onClick={() => setLightboxData({
+                              src: item.img!,
+                              title: `${item.n}`,
+                              phone: formData.cPhone,
+                              caption: `*نفیس جیولرز - بل آئٹم*\nکسٹمر: ${formData.cName || '-'}\nآئٹم: ${item.n}\nوزن: ${item.w}g\nریٹ: Rs. ${item.r.toLocaleString()}\nکل: Rs. ${Math.abs(item.t).toLocaleString()}`
+                            })}
+                            className="w-14 h-14 rounded-xl overflow-hidden border border-sky-100 shadow-sm cursor-pointer hover:border-gold duration-200 transition-colors"
+                            title={lang === 'ur' ? 'تصویر دیکھیں' : 'View Image'}
+                          >
+                            <img src={item.img} alt={item.n} className="w-full h-full object-cover" />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              await shareImageToWhatsApp({
+                                imageSrc: item.img!,
+                                phone: formData.cPhone,
+                                caption: `*نفیس جیولرز - بل آئٹم*\nکسٹمر: ${formData.cName || '-'}\nآئٹم: ${item.n}\nوزن: ${item.w}g\nریٹ: Rs. ${item.r.toLocaleString()}\nکل: Rs. ${Math.abs(item.t).toLocaleString()}`,
+                                title: item.n
+                              });
+                            }}
+                            className="absolute -bottom-1 -right-1 p-1 bg-green-600 hover:bg-green-700 text-white rounded-full shadow-md transition-colors"
+                            title="WhatsApp"
+                          >
+                            <MessageCircle size={10} />
+                          </button>
                         </div>
                       )}
                       <div className="flex-1 min-w-0">
@@ -887,8 +937,14 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
         }}
         lang={lang}
       />
-      {lightboxImage && (
-        <ImageLightbox src={lightboxImage} onClose={() => setLightboxImage(null)} title={lang === 'ur' ? 'بل آئٹم تصویر' : 'Invoice Item Image'} />
+      {lightboxData && (
+        <ImageLightbox 
+          src={lightboxData.src} 
+          onClose={() => setLightboxData(null)} 
+          title={lightboxData.title || (lang === 'ur' ? 'بل آئٹم تصویر' : 'Invoice Item Image')} 
+          phone={lightboxData.phone}
+          caption={lightboxData.caption}
+        />
       )}
     </div>
   );

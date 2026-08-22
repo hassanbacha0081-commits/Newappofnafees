@@ -10,6 +10,7 @@ import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import PdfExportHidden, { PdfExportRef, PdfSection } from './PdfExportHidden';
+import CloudSyncManager from './CloudSyncManager';
 import { 
   addAuthListener, 
   googleSignIn, 
@@ -98,12 +99,6 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
   const t = translations[lang];
   const pdfRef = React.useRef<PdfExportRef>(null);
   const [rateInput, setRateInput] = useState<string>('');
-  const [shopNameInput, setShopNameInput] = useState<string>('');
-  const [shopAddressInput, setShopAddressInput] = useState<string>('');
-  const [shopPhoneInput, setShopPhoneInput] = useState<string>('');
-  const [shopPhone2Input, setShopPhone2Input] = useState<string>('');
-  const [shiftXInput, setShiftXInput] = useState<string>('');
-  const [shiftYInput, setShiftYInput] = useState<string>('');
   const [pinInput, setPinInput] = useState<string>('');
   const [showConfirmClear, setShowConfirmClear] = useState(false);
   const [securityAction, setSecurityAction] = useState<{ nameUr: string, nameEn: string, onVerify: () => void } | null>(null);
@@ -300,10 +295,6 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
   useEffect(() => {
     const fetchSettings = async () => {
       const rateData = await db.settings.get('goldRate');
-      const nameData = await db.settings.get('shopName');
-      const addressData = await db.settings.get('shopAddress');
-      const phoneData = await db.settings.get('shopPhone');
-      const phone2Data = await db.settings.get('shopPhone2');
       const shiftXData = await db.settings.get('printShiftX');
       const shiftYData = await db.settings.get('printShiftY');
       const backupFreqData = await db.settings.get('autoBackupFrequency');
@@ -311,10 +302,10 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
       
       setCurrentSettings({
         goldRate: rateData?.value || 0,
-        shopName: nameData?.value || translations[lang].shopName,
-        shopAddress: addressData?.value || translations[lang].shopAddress,
-        shopPhone: phoneData?.value || translations[lang].shopPhone,
-        shopPhone2: phone2Data?.value || translations[lang].shopPhone2,
+        shopName: lang === 'ur' ? APP_CONFIG.shopNameUrdu : APP_CONFIG.shopNameEnglish,
+        shopAddress: lang === 'ur' ? APP_CONFIG.shopAddressUrdu : APP_CONFIG.shopAddressEnglish,
+        shopPhone: APP_CONFIG.phone1,
+        shopPhone2: APP_CONFIG.phone2,
         printShiftX: shiftXData?.value || 0,
         printShiftY: shiftYData?.value || 0,
         autoBackupFrequency: backupFreqData?.value || 'none',
@@ -357,51 +348,19 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
     );
   };
 
-  const handleSaveShopDetails = async () => {
+  const handleSavePin = async () => {
+    if (!pinInput) {
+      alert(lang === 'ur' ? 'براہ کرم پاس ورڈ درج کریں' : 'Please enter a PIN');
+      return;
+    }
     triggerSecurityCheck(
-      'تفصیلات تبدیل کریں',
-      'Change Details & Settings',
+      'پاس ورڈ تبدیل کریں',
+      'Set App Password',
       async () => {
-        if (shopNameInput) {
-          await db.settings.put({ key: 'shopName', value: shopNameInput });
-          setCurrentSettings(prev => ({ ...prev, shopName: shopNameInput }));
-        }
-        if (shopAddressInput) {
-          await db.settings.put({ key: 'shopAddress', value: shopAddressInput });
-          setCurrentSettings(prev => ({ ...prev, shopAddress: shopAddressInput }));
-        }
-        if (shopPhoneInput) {
-          await db.settings.put({ key: 'shopPhone', value: shopPhoneInput });
-          setCurrentSettings(prev => ({ ...prev, shopPhone: shopPhoneInput }));
-        }
-        if (shopPhone2Input) {
-          await db.settings.put({ key: 'shopPhone2', value: shopPhone2Input });
-          setCurrentSettings(prev => ({ ...prev, shopPhone2: shopPhone2Input }));
-        }
-        
-        // Save shifts if they are typed (even if 0)
-        if (shiftXInput !== '') {
-          await db.settings.put({ key: 'printShiftX', value: Number(shiftXInput) });
-          setCurrentSettings(prev => ({ ...prev, printShiftX: Number(shiftXInput) }));
-        }
-        if (shiftYInput !== '') {
-          await db.settings.put({ key: 'printShiftY', value: Number(shiftYInput) });
-          setCurrentSettings(prev => ({ ...prev, printShiftY: Number(shiftYInput) }));
-        }
-        
-        if (pinInput !== '') {
-          await db.settings.put({ key: 'appPin', value: pinInput });
-          setCurrentSettings(prev => ({ ...prev, appPin: pinInput }));
-        }
-
-        setShopNameInput('');
-        setShopAddressInput('');
-        setShopPhoneInput('');
-        setShopPhone2Input('');
-        setShiftXInput('');
-        setShiftYInput('');
-        alert(lang === 'ur' ? 'دکان اور پرنٹ کی تفصیلات محفوظ کر لی گئی ہیں' : 'Shop and print details saved successfully');
-        window.location.reload(); // Reload to update App header
+        await db.settings.put({ key: 'appPin', value: pinInput });
+        setCurrentSettings(prev => ({ ...prev, appPin: pinInput }));
+        setPinInput('');
+        alert(lang === 'ur' ? 'ایپ پاس ورڈ محفوظ کر لیا گیا ہے' : 'App password saved successfully');
       }
     );
   };
@@ -794,50 +753,31 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
           <div className="bg-white p-6 rounded-xl shadow-sm border border-sky-200 space-y-6">
             <h3 className="text-lg font-bold text-gold-dark border-b border-sky-100 pb-2 urdu-text">{lang === 'ur' ? 'دکان کی تفصیلات' : 'Shop Details'}</h3>
 
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-zinc-500 urdu-text">{t.shopName}</label>
-                <input 
-                  type="text" 
-                  value={shopNameInput}
-                  onChange={e => setShopNameInput(e.target.value)}
-                  className="w-full px-4 py-2 bg-white border border-sky-200 rounded-lg focus:ring-2 focus:ring-gold outline-none text-black"
-                />
+            {/* Read-only fixed Shop Information badge */}
+            <div className="bg-gradient-to-br from-amber-50 to-sky-50 p-4 rounded-xl border border-amber-200/80 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wide urdu-text">
+                  {lang === 'ur' ? 'دکان کی معلومات (مقررہ)' : 'Shop Information (Fixed)'}
+                </span>
+                <span className="text-[10px] font-bold px-2.5 py-0.5 bg-amber-500 text-slate-950 rounded-full shadow-2xs">
+                  {lang === 'ur' ? 'نفیس جیولرز' : 'Nafees Jewellers'}
+                </span>
               </div>
-              
               <div className="space-y-1">
-                <label className="text-xs font-bold text-zinc-500 urdu-text">{t.addressLabel}</label>
-                <input 
-                  type="text" 
-                  value={shopAddressInput}
-                  onChange={e => setShopAddressInput(e.target.value)}
-                  className="w-full px-4 py-2 bg-white border border-sky-200 rounded-lg focus:ring-2 focus:ring-gold outline-none text-black"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-zinc-500 urdu-text">{t.phoneNumber} 1</label>
-                  <input 
-                    type="text" 
-                    value={shopPhoneInput}
-                    onChange={e => setShopPhoneInput(e.target.value)}
-                    className="w-full px-4 py-2 bg-white border border-sky-200 rounded-lg focus:ring-2 focus:ring-gold outline-none text-black"
-                    dir="ltr"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-zinc-500 urdu-text">{t.phoneNumber} 2</label>
-                  <input 
-                    type="text" 
-                    value={shopPhone2Input}
-                    onChange={e => setShopPhone2Input(e.target.value)}
-                    className="w-full px-4 py-2 bg-white border border-sky-200 rounded-lg focus:ring-2 focus:ring-gold outline-none text-black"
-                    dir="ltr"
-                  />
+                <h4 className="text-lg font-black text-slate-900 urdu-text">
+                  {lang === 'ur' ? APP_CONFIG.shopNameUrdu : APP_CONFIG.shopNameEnglish}
+                </h4>
+                <p className="text-xs text-slate-600 urdu-text">
+                  {lang === 'ur' ? APP_CONFIG.shopAddressUrdu : APP_CONFIG.shopAddressEnglish}
+                </p>
+                <div className="flex flex-wrap items-center gap-3 pt-1 text-xs font-mono font-bold text-slate-700" dir="ltr">
+                  <span>📱 {APP_CONFIG.phone1}</span>
+                  {APP_CONFIG.phone2 && <span>📱 {APP_CONFIG.phone2}</span>}
                 </div>
               </div>
+            </div>
 
+            <div className="space-y-4 pt-2">
               <div className="space-y-1">
                 <label className="text-xs font-bold text-zinc-500 urdu-text">{t.goldRate}</label>
                 <div className="flex gap-2">
@@ -845,13 +785,16 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
                     type="number" 
                     value={rateInput || ''}
                     onChange={e => setRateInput(e.target.value)}
+                    placeholder={lang === 'ur' ? 'نیا ریٹ درج کریں...' : 'Enter new rate...'}
                     className="flex-1 px-4 py-2 bg-white border border-sky-200 rounded-lg focus:ring-2 focus:ring-gold outline-none font-bold text-black"
                   />
                   <button 
                     onClick={handleSaveRate}
-                    className="px-4 bg-gold text-black rounded-lg hover:bg-gold-light transition-colors shadow-lg shadow-gold-20"
+                    className="px-4 bg-gold text-black rounded-lg hover:bg-gold-light transition-colors shadow-lg shadow-gold-20 font-bold flex items-center gap-1.5"
+                    title={lang === 'ur' ? 'ریٹ محفوظ کریں' : 'Save Rate'}
                   >
-                    <Save size={20} />
+                    <Save size={18} />
+                    <span className="urdu-text text-xs">{t.save}</span>
                   </button>
                 </div>
               </div>
@@ -860,7 +803,7 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
                 <label className="text-xs font-bold text-zinc-500 urdu-text flex items-center justify-between">
                   <span>{t.appSecurity}</span>
                   {currentSettings.appPin && (
-                    <span className="text-[10px] text-green-600 bg-green-100 px-2 py-0.5 rounded-full">Active</span>
+                    <span className="text-[10px] text-green-600 bg-green-100 px-2 py-0.5 rounded-full font-bold">Active</span>
                   )}
                 </label>
                 <div className="flex gap-2">
@@ -872,84 +815,41 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
                     className="flex-1 px-4 py-2 bg-white border border-sky-200 rounded-lg focus:ring-2 focus:ring-gold outline-none text-center tracking-widest text-black"
                     dir="ltr"
                   />
+                  <button 
+                    onClick={handleSavePin}
+                    className="px-4 bg-gold text-black rounded-lg hover:bg-gold-light transition-colors shadow-lg shadow-gold-20 font-bold flex items-center gap-1.5"
+                    title={lang === 'ur' ? 'پاس ورڈ محفوظ کریں' : 'Save Password'}
+                  >
+                    <Save size={18} />
+                    <span className="urdu-text text-xs">{t.save}</span>
+                  </button>
                   {currentSettings.appPin && (
                     <button 
                       onClick={handleRemovePin}
-                      className="px-4 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
+                      className="px-3 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
                       title={t.removePin}
                     >
-                      <Trash2 size={20} />
+                      <Trash2 size={18} />
                     </button>
                   )}
                 </div>
                 <p className="text-[10px] text-zinc-400">{lang === 'ur' ? 'ایپ کو کھولنے کے لیے پاس ورڈ سیٹ کریں' : 'Set a password to lock the application on startup.'}</p>
               </div>
-
-              <button 
-                onClick={handleSaveShopDetails}
-                className="w-full py-3 bg-gold text-black rounded-lg font-bold hover:bg-gold-light transition-colors flex items-center justify-center gap-2 shadow-lg shadow-gold-20"
-              >
-                <Save size={20} />
-                <span className="urdu-text">{t.save}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* PDF Print Calibration */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-sky-200 space-y-4">
-            <h3 className="text-lg font-bold text-gold-dark border-b border-sky-100 pb-2 urdu-text">
-              {lang === 'ur' ? 'پہلے سے پرنٹ شدہ بل کیٹنگ (Pre-printed Calibration)' : 'Print Calibration'}
-            </h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-zinc-500 mb-1 urdu-text">{lang === 'ur' ? 'موجودہ شفٹ' : 'Current Shift'}</label>
-                <p className="text-sm font-bold text-sky-600 font-mono" dir="ltr">
-                  X: {currentSettings.printShiftX}mm, Y: {currentSettings.printShiftY}mm
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-zinc-500 mb-1 urdu-text">{lang === 'ur' ? 'افقی ایڈجسٹمنٹ (Shift X)' : 'Shift X (mm)'}</label>
-                  <input
-                    type="number"
-                    value={shiftXInput}
-                    onChange={(e) => setShiftXInput(e.target.value)}
-                    placeholder="e.g. 5 or -5"
-                    className="w-full p-2 border border-sky-200 rounded-lg outline-none"
-                    dir="ltr"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-zinc-500 mb-1 urdu-text">{lang === 'ur' ? 'عمودی ایڈجسٹمنٹ (Shift Y)' : 'Shift Y (mm)'}</label>
-                  <input
-                    type="number"
-                    value={shiftYInput}
-                    onChange={(e) => setShiftYInput(e.target.value)}
-                    placeholder="e.g. 5 or -5"
-                    className="w-full p-2 border border-sky-200 rounded-lg outline-none"
-                    dir="ltr"
-                  />
-                </div>
-              </div>
-              <button 
-                onClick={handleSaveShopDetails}
-                className="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors mt-2"
-              >
-                <Save size={20} />
-                <span className="urdu-text">{lang === 'ur' ? 'کیلیبریشن محفوظ کریں' : 'Save Calibration'}</span>
-              </button>
             </div>
           </div>
 
           {/* Data Management - HIGHLIGHTED */}
           <div className="bg-white p-8 rounded-2xl shadow-xl border-2 border-gold space-y-6 relative overflow-hidden">
             <div className="absolute top-0 right-0 p-3 bg-gold text-black text-[10px] font-black uppercase tracking-widest rounded-bl-xl">
-              Critical Actions
+              Enterprise Cloud & Data
             </div>
             <h3 className="text-xl font-bold text-sky-900 border-b border-sky-100 pb-4 urdu-text flex items-center gap-3">
               <Download className="text-gold" />
-              {lang === 'ur' ? 'بیک اپ اور ڈیٹا مینجمنٹ' : 'Backup & Data Management'}
+              {lang === 'ur' ? 'کلاؤڈ سنکرونائزیشن اور بیک اپ مینجمنٹ' : 'Cloud Synchronization & Backup Management'}
             </h3>
+
+            {/* Central Cloud Synchronization Manager */}
+            <CloudSyncManager lang={lang} onSafetyBackup={handleBackup} />
 
             {/* Google Drive Automated Backup Section */}
             <div className="p-6 bg-sky-50 rounded-2xl border border-sky-200/60 space-y-4">

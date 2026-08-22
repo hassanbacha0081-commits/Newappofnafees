@@ -19,8 +19,13 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
 const provider = new GoogleAuthProvider();
-// Request Google Drive file-level access
+// Request Google Drive file-level access and user profile
 provider.addScope('https://www.googleapis.com/auth/drive.file');
+provider.addScope('https://www.googleapis.com/auth/userinfo.email');
+provider.addScope('https://www.googleapis.com/auth/userinfo.profile');
+provider.setCustomParameters({
+  prompt: 'select_account'
+});
 
 let isSigningIn = false;
 let cachedAccessToken: string | null = null;
@@ -176,7 +181,7 @@ export const handleAuthRedirectResult = async () => {
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
   isSigningIn = true;
 
-  // 1. First attempt standard Firebase Auth popup (works on Web & modern Capacitor WebViews)
+  // 1. Primary Method: Firebase Auth signInWithPopup (standard & works on web / desktop)
   try {
     const result = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
@@ -185,74 +190,68 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
       return authRes;
     }
   } catch (popupErr: any) {
-    console.warn('signInWithPopup failed or was blocked, attempting fallback:', popupErr);
+    console.warn('signInWithPopup failed or was blocked, trying next method:', popupErr);
   }
 
-  // 2. Fallback: If on Capacitor Native Platform, use Firebase Auth redirect flow
-  if (Capacitor.isNativePlatform()) {
-    try {
-      await signInWithRedirect(auth, provider);
-      return new Promise((resolve) => {
-        nativeResolve = resolve;
-        setTimeout(() => {
-          if (nativeResolve) {
-            nativeResolve(null);
-            nativeResolve = null;
-            isSigningIn = false;
-          }
-        }, 120000);
-      });
-    } catch (redirectErr) {
-      console.warn('signInWithRedirect failed on native platform:', redirectErr);
-    }
-  }
-
-  // 3. Web & Desktop Fallback: OAuth 2.0 Implicit Flow using valid current HTTPS origin
+  // 2. Secondary Method: Google Identity Services (GIS) token client for Web
   try {
-    const clientId = firebaseConfig.oAuthClientId || '832891644845-1p2fddt518q3s6c2lan134plq9tkjiqj.apps.googleusercontent.com';
-    const redirectUri = window.location.origin + window.location.pathname;
-    const scope = encodeURIComponent('https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile');
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${scope}&prompt=consent`;
-
-    const popupWin = window.open(authUrl, 'google_drive_oauth', 'width=520,height=650,left=100,top=100');
-    if (popupWin && !popupWin.closed) {
-      return new Promise((resolve) => {
-        const interval = setInterval(async () => {
-          try {
-            if (popupWin.closed) {
-              clearInterval(interval);
-              isSigningIn = false;
-              resolve(null);
-              return;
-            }
-            if (popupWin.location.hash && popupWin.location.hash.includes('access_token=')) {
-              const hashParams = new URLSearchParams(popupWin.location.hash.substring(1));
-              const token = hashParams.get('access_token');
-              clearInterval(interval);
-              popupWin.close();
-              if (token) {
-                const res = await setCachedAccessToken(token);
-                resolve(res);
+    const google = typeof window !== 'undefined' ? (window as any).google : null;
+    if (google?.accounts?.oauth2) {
+      const tokenPromise = new Promise<{ user: User; accessToken: string } | null>((resolve) => {
+        try {
+          const clientId = firebaseConfig.oAuthClientId || '832891644845-1p2fddt518q3s6c2lan134plq9tkjiqj.apps.googleusercontent.com';
+          const tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: clientId,
+            scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile',
+            callback: async (resp: any) => {
+              if (resp?.access_token) {
+                const authRes = await setCachedAccessToken(resp.access_token);
+                resolve(authRes);
               } else {
                 resolve(null);
               }
+            },
+            error_callback: (err: any) => {
+              console.warn('Google Identity Services client error:', err);
+              resolve(null);
             }
-          } catch (e) {
-            // Cross-origin restriction while popup is on google.com - ignore
-          }
-        }, 500);
+          });
+          tokenClient.requestAccessToken({ prompt: 'select_account' });
+        } catch (gisInitErr) {
+          console.warn('GIS init failed:', gisInitErr);
+          resolve(null);
+        }
       });
-    } else {
-      // Popup completely blocked, fallback to full page redirect
-      window.location.href = authUrl;
-      return null;
+
+      const gisResult = await tokenPromise;
+      if (gisResult) {
+        return gisResult;
+      }
     }
-  } catch (error: any) {
-    console.error('Google OAuth sign-in completely failed:', error);
-    return null;
+  } catch (gisErr) {
+    console.warn('GIS fallback threw an error:', gisErr);
+  }
+
+  // 3. Native & Fallback: Firebase Auth signInWithRedirect
+  try {
+    await signInWithRedirect(auth, provider);
+    return new Promise((resolve) => {
+      nativeResolve = resolve;
+      setTimeout(() => {
+        if (nativeResolve) {
+          nativeResolve(null);
+          nativeResolve = null;
+          isSigningIn = false;
+        }
+      }, 60000);
+    });
+  } catch (redirectErr) {
+    console.error('signInWithRedirect failed:', redirectErr);
   } finally {
     isSigningIn = false;
   }
+
+  return null;
 };
 
 export const getAccessToken = (): string | null => {

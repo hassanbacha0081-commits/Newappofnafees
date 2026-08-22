@@ -1,5 +1,15 @@
 import Dexie, { type Table } from 'dexie';
 
+export interface SyncMetadata {
+  _syncId?: string;           // Unique UUID across devices
+  _updatedAt?: number;        // Timestamp ms
+  _createdAt?: number;        // Timestamp ms
+  _deletedAt?: number | null; // Soft-delete marker
+  _syncedAt?: number | null;  // Last sync timestamp
+  _version?: number;          // Monotonically increasing revision
+  _deviceId?: string;         // Originating client identifier
+}
+
 export interface SalesItem {
   n: string; // Item name
   w: number; // Weight
@@ -10,7 +20,7 @@ export interface SalesItem {
   img?: string | null;
 }
 
-export interface Sale {
+export interface Sale extends SyncMetadata {
   id?: number;
   name: string;
   phone: string;
@@ -27,7 +37,7 @@ export interface OrderPayment {
   date: string;
 }
 
-export interface Order {
+export interface Order extends SyncMetadata {
   id?: number;
   name: string;
   phone: string;
@@ -53,7 +63,7 @@ export interface Order {
   mazdori?: number;
 }
 
-export interface KarigarRecord {
+export interface KarigarRecord extends SyncMetadata {
   id?: number;
   name: string;
   phone: string;
@@ -68,7 +78,7 @@ export interface KarigarRecord {
   settledDate?: string;       // Date of settlement
 }
 
-export interface KhaataAccount {
+export interface KhaataAccount extends SyncMetadata {
   id?: number;
   name: string;
   phone: string;
@@ -76,12 +86,13 @@ export interface KhaataAccount {
   notes?: string;
 }
 
-export interface KhaataEntry {
+export interface KhaataEntry extends SyncMetadata {
   id?: number;
   accountId: number;
+  accountSyncId?: string; // Cross-device stable foreign key
   date: string;
   details: string;        // Items details
-  type: 'give' | 'receive'; // give = بنام (دیا / Out), receive = جمع (وصول / In)
+  type: 'give' | 'receive'; // give = بنام (Out), receive = جمع (In)
   mixWeight: number;      // Mix weight (g)
   pakaye: number;         // Pakaye (g)
   kaatRati: number;       // Kaat in rati
@@ -90,7 +101,7 @@ export interface KhaataEntry {
   img?: string | null;    // Image base64 or URL
 }
 
-export interface Repair {
+export interface Repair extends SyncMetadata {
   id?: number;
   customerName: string;
   customerPhone: string;
@@ -103,7 +114,7 @@ export interface Repair {
   img?: string | null;
 }
 
-export interface StockItem {
+export interface StockItem extends SyncMetadata {
   id?: number;
   name: string;
   type: 'Gold' | 'Item';
@@ -113,7 +124,7 @@ export interface StockItem {
   img?: string | null;
 }
 
-export interface GoldPurchase {
+export interface GoldPurchase extends SyncMetadata {
   id?: number;
   name: string;
   phone: string;
@@ -124,7 +135,7 @@ export interface GoldPurchase {
   img?: string | null;
 }
 
-export interface Expense {
+export interface Expense extends SyncMetadata {
   id?: number;
   category: string;
   description: string;
@@ -132,16 +143,39 @@ export interface Expense {
   date: string;
 }
 
-export interface Setting {
+export interface Setting extends SyncMetadata {
   id?: string;
   key: string;
   value: any;
 }
 
-export interface PhoneContact {
+export interface PhoneContact extends SyncMetadata {
   id?: number;
   name: string;
   phone: string;
+}
+
+export interface SyncQueueItem {
+  id?: number;
+  table: string;
+  recordId?: number | string;
+  syncId: string;
+  action: 'create' | 'update' | 'delete';
+  data?: any;
+  timestamp: number;
+  retries: number;
+  status: 'pending' | 'processing' | 'failed';
+  error?: string;
+}
+
+export interface SyncConflictItem {
+  id?: number;
+  table: string;
+  syncId: string;
+  localData: any;
+  cloudData: any;
+  detectedAt: number;
+  resolved: boolean;
 }
 
 export class MyDatabase extends Dexie {
@@ -156,9 +190,13 @@ export class MyDatabase extends Dexie {
   contacts!: Table<PhoneContact>;
   khaataAccounts!: Table<KhaataAccount>;
   khaataEntries!: Table<KhaataEntry>;
+  syncQueue!: Table<SyncQueueItem>;
+  syncConflicts!: Table<SyncConflictItem>;
 
   constructor() {
     super('NafeesERP_V56_Final');
+    
+    // Existing schema history preserved
     this.version(6).stores({
       sales: '++id, name, phone, date',
       orders: '++id, name, phone, status, due, karigar',
@@ -206,16 +244,33 @@ export class MyDatabase extends Dexie {
       khaataAccounts: '++id, name, phone',
       khaataEntries: '++id, accountId, date'
     });
+
+    // Version 10: Non-destructive migration adding sync metadata indexes and sync queue tables
+    this.version(10).stores({
+      sales: '++id, _syncId, name, phone, date, _updatedAt, _deletedAt',
+      orders: '++id, _syncId, name, phone, status, due, karigar, _updatedAt, _deletedAt',
+      karigars: '++id, _syncId, name, phone, date, _updatedAt, _deletedAt',
+      repairs: '++id, _syncId, customerName, status, date, _updatedAt, _deletedAt',
+      stock: '++id, _syncId, name, type, [name+type], _updatedAt, _deletedAt',
+      settings: 'key, _syncId, _updatedAt',
+      goldPurchases: '++id, _syncId, name, phone, date, _updatedAt, _deletedAt',
+      expenses: '++id, _syncId, category, date, _updatedAt, _deletedAt',
+      contacts: '++id, _syncId, name, phone, _updatedAt, _deletedAt',
+      khaataAccounts: '++id, _syncId, name, phone, _updatedAt, _deletedAt',
+      khaataEntries: '++id, _syncId, accountId, accountSyncId, date, _updatedAt, _deletedAt',
+      syncQueue: '++id, table, syncId, status, timestamp',
+      syncConflicts: '++id, table, syncId, resolved, detectedAt'
+    });
   }
 }
 
 const db = new MyDatabase();
 
-// Safety: Ensure tables are accessible even if shortcut properties are delayed
+// Export database instance
 export { db };
 
 db.on('ready', () => {
-  console.log('Database is ready');
+  console.log('Database NafeesERP_V56_Final is ready with Sync Engine v10');
 });
 
 db.open().catch((err) => {

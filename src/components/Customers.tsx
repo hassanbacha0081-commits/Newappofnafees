@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Sale, type Order } from '../db';
-import { Search, User, Phone, MapPin, ChevronRight, History, CreditCard, Package } from 'lucide-react';
-import { formatDate, formatWhatsAppUrl } from '../lib/utils';
+import { Search, User, Phone, MapPin, ChevronRight, History, CreditCard, Package, MessageCircle, Eye } from 'lucide-react';
+import { formatDate, formatWhatsAppUrl, shareImageToWhatsApp } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+import ImageLightbox from './ImageLightbox';
 
 import { APP_CONFIG } from '../config';
 
@@ -26,6 +27,7 @@ export default function Customers({ lang }: CustomersProps) {
   const isUrdu = lang === 'ur';
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerSummary | null>(null);
+  const [lightboxData, setLightboxData] = useState<{ src: string; title?: string; phone?: string; caption?: string } | null>(null);
 
   const sales = useLiveQuery(() => db.sales.toArray()) || [];
   const orders = useLiveQuery(() => db.orders.toArray()) || [];
@@ -242,12 +244,46 @@ export default function Customers({ lang }: CustomersProps) {
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {selectedCustomer.orders.map((order, idx) => (
-                        <div key={idx} className="p-4 rounded-2xl border border-zinc-100 hover:border-amber-200 transition-colors flex justify-between items-center bg-zinc-50/50">
-                          <div>
-                            <p className="text-xs font-bold text-zinc-500">{order.item} ({formatDate(order.date)})</p>
-                            <p className="text-sm font-black text-zinc-900">Rs. {order.total.toLocaleString()}</p>
+                        <div key={idx} className="p-4 rounded-2xl border border-zinc-100 hover:border-amber-200 transition-colors flex justify-between items-center bg-zinc-50/50 gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            {order.img && (
+                              <div className="relative group/custimg flex-shrink-0">
+                                <div
+                                  onClick={() => setLightboxData({
+                                    src: order.img!,
+                                    title: `${order.name} - ${order.item}`,
+                                    phone: order.phone,
+                                    caption: `*نفیس جیولرز - آرڈر تصویر*\nگاہک: ${order.name}\nآئٹم: ${order.item}\nکل رقم: Rs. ${order.total.toLocaleString()}\nایڈوانس: Rs. ${order.adv.toLocaleString()}\nبقایا: Rs. ${order.rem.toLocaleString()}\nاسٹیٹس: ${order.status}`
+                                  })}
+                                  className="w-12 h-12 rounded-xl overflow-hidden border border-zinc-200 shadow-sm cursor-pointer hover:border-gold transition-colors"
+                                  title={isUrdu ? 'تصویر دیکھیں' : 'View Image'}
+                                >
+                                  <img src={order.img} alt={order.item} className="w-full h-full object-cover" />
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    await shareImageToWhatsApp({
+                                      imageSrc: order.img!,
+                                      phone: order.phone,
+                                      caption: `*نفیس جیولرز - آرڈر تصویر*\nگاہک: ${order.name}\nآئٹم: ${order.item}\nکل رقم: Rs. ${order.total.toLocaleString()}\nایڈوانس: Rs. ${order.adv.toLocaleString()}\nبقایا: Rs. ${order.rem.toLocaleString()}\nاسٹیٹس: ${order.status}`,
+                                      title: `Order - ${order.name}`
+                                    });
+                                  }}
+                                  className="absolute -bottom-1 -right-1 p-1 bg-green-600 hover:bg-green-700 text-white rounded-full shadow transition-colors"
+                                  title="WhatsApp Photo"
+                                >
+                                  <MessageCircle size={10} />
+                                </button>
+                              </div>
+                            )}
+                            <div className="truncate">
+                              <p className="text-xs font-bold text-zinc-500 truncate">{order.item} ({formatDate(order.date)})</p>
+                              <p className="text-sm font-black text-zinc-900">Rs. {order.total.toLocaleString()}</p>
+                            </div>
                           </div>
-                          <div className={`px-3 py-1 rounded-full text-[10px] font-bold ${order.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-sky-100 text-sky-700'}`}>
+                          <div className={`px-3 py-1 rounded-full text-[10px] font-bold flex-shrink-0 ${order.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-sky-100 text-sky-700'}`}>
                             {order.status}
                           </div>
                         </div>
@@ -273,6 +309,15 @@ export default function Customers({ lang }: CustomersProps) {
           </AnimatePresence>
         </div>
       </div>
+      {lightboxData && (
+        <ImageLightbox 
+          src={lightboxData.src} 
+          onClose={() => setLightboxData(null)} 
+          title={lightboxData.title || (isUrdu ? 'تصویر' : 'Image')} 
+          phone={lightboxData.phone}
+          caption={lightboxData.caption}
+        />
+      )}
     </div>
   );
 }

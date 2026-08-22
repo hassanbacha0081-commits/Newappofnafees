@@ -2,7 +2,8 @@ import React, { useState, useRef, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type StockItem } from '../db';
 import { translations, type Language } from '../translations';
-import { Plus, Trash2, Edit2, Package, Coins, Camera, RotateCcw, Image as ImageIcon, AlertTriangle, Printer, X, Download, AlertCircle, Search } from 'lucide-react';
+import { Plus, Trash2, Edit2, Package, Coins, Camera, RotateCcw, Image as ImageIcon, AlertTriangle, Printer, X, Download, AlertCircle, Search, MessageCircle, Eye } from 'lucide-react';
+import { shareImageToWhatsApp } from '../lib/utils';
 import { useReactToPrint } from 'react-to-print';
 import { html2canvasWithOklch as html2canvas } from '../lib/html2canvas-helper';
 import jsPDF from 'jspdf';
@@ -24,7 +25,7 @@ export default function Stock({ lang }: StockProps) {
   const t = translations[lang];
   const [isAdding, setIsAdding] = useState(false);
   const [currentImg, setCurrentImg] = useState<string | null>(null);
-  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [lightboxData, setLightboxData] = useState<{ src: string; title?: string; phone?: string; caption?: string } | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [formData, setFormData] = useState<Partial<StockItem>>({
     name: '',
@@ -225,8 +226,13 @@ export default function Stock({ lang }: StockProps) {
     setDeleteId(null);
   };
 
-  const showImg = (src: string) => {
-    setLightboxImage(src);
+  const showImg = (item: StockItem) => {
+    if (!item.img) return;
+    setLightboxData({
+      src: item.img,
+      title: item.name,
+      caption: `*نفیس جیولرز - اسٹاک آئٹم*\nآئٹم کا نام: ${item.name}\nقسم: ${item.type}\nمقدار: ${item.quantity}${item.unit === 'pcs' ? ' عدد' : 'g'}${item.pieces ? ` (${item.pieces} Pcs)` : ''}`
+    });
   };
 
     return (
@@ -425,14 +431,39 @@ export default function Stock({ lang }: StockProps) {
             </div>
             <div className="mt-4 space-y-2">
               {currentImg ? (
-                <div className="relative group cursor-pointer" onClick={() => setLightboxImage(currentImg)}>
+                <div 
+                  className="relative group cursor-pointer" 
+                  onClick={() => setLightboxData({
+                    src: currentImg,
+                    title: formData.name || (lang === 'ur' ? 'سٹاک تصویر' : 'Stock Image'),
+                    caption: `*نفیس جیولرز - نیا اسٹاک*\nآئٹم کا نام: ${formData.name || '-'}\nقسم: ${formData.type || 'Gold'}\nمقدار: ${formData.quantity || 0}${formData.unit === 'pcs' ? ' عدد' : 'g'}`
+                  })}
+                >
                   <img src={currentImg} alt="Preview" className="w-full h-64 object-contain border border-sky-200 rounded-lg group-hover:opacity-95 transition-opacity" />
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); setCurrentImg(null); }}
-                    className="absolute top-2 right-2 p-2 bg-red-600 text-white rounded-full z-10"
-                  >
-                    <RotateCcw size={16} />
-                  </button>
+                  <div className="absolute top-2 right-2 flex gap-1 z-10">
+                    <button 
+                      type="button"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        await shareImageToWhatsApp({
+                          imageSrc: currentImg,
+                          caption: `*نفیس جیولرز - نیا اسٹاک*\nآئٹم کا نام: ${formData.name || '-'}\nقسم: ${formData.type || 'Gold'}\nمقدار: ${formData.quantity || 0}${formData.unit === 'pcs' ? ' عدد' : 'g'}`,
+                          title: 'Stock Item Pic'
+                        });
+                      }}
+                      className="p-1.5 bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors shadow-md"
+                      title="WhatsApp Photo"
+                    >
+                      <MessageCircle size={14} />
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setCurrentImg(null); }}
+                      className="p-1.5 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors shadow-md"
+                    >
+                      <RotateCcw size={14} />
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <>
@@ -510,12 +541,29 @@ export default function Stock({ lang }: StockProps) {
                 <Printer size={18} />
               </button>
               {item.img && (
-                <button 
-                  onClick={() => showImg(item.img!)}
-                  className="p-2 text-zinc-500 hover:text-gold-dark transition-colors"
-                >
-                  <ImageIcon size={18} />
-                </button>
+                <>
+                  <button 
+                    onClick={() => showImg(item)}
+                    className="p-2 text-sky-600 hover:text-sky-800 transition-colors"
+                    title={lang === 'ur' ? 'تصویر دیکھیں' : 'View Image'}
+                  >
+                    <ImageIcon size={18} />
+                  </button>
+                  <button 
+                    onClick={async () => {
+                      const res = await shareImageToWhatsApp({
+                        imageSrc: item.img!,
+                        caption: `*نفیس جیولرز - اسٹاک آئٹم*\nآئٹم کا نام: ${item.name}\nقسم: ${item.type}\nمقدار: ${item.quantity}${item.unit === 'pcs' ? ' عدد' : 'g'}${item.pieces ? ` (${item.pieces} Pcs)` : ''}`,
+                        title: item.name
+                      });
+                      if (res.message) alert(res.message);
+                    }}
+                    className="p-2 text-green-600 hover:text-green-800 transition-colors"
+                    title={lang === 'ur' ? 'واٹس ایپ پر تصویر بھیجیں' : 'WhatsApp Photo'}
+                  >
+                    <MessageCircle size={18} />
+                  </button>
+                </>
               )}
               <button 
                 onClick={() => item.id && setDeleteId(item.id)}
@@ -528,8 +576,14 @@ export default function Stock({ lang }: StockProps) {
         ))}
       </div>
 
-      {lightboxImage && (
-        <ImageLightbox src={lightboxImage} onClose={() => setLightboxImage(null)} title={lang === 'ur' ? 'سٹاک تصویر' : 'Stock Image'} />
+      {lightboxData && (
+        <ImageLightbox 
+          src={lightboxData.src} 
+          onClose={() => setLightboxData(null)} 
+          title={lightboxData.title || (lang === 'ur' ? 'سٹاک تصویر' : 'Stock Image')} 
+          phone={lightboxData.phone}
+          caption={lightboxData.caption}
+        />
       )}
     </div>
   );

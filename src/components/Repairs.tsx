@@ -2,8 +2,8 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Repair } from '../db';
 import { translations, type Language } from '../translations';
-import { formatCurrency, formatDate, formatWhatsAppUrl, compressImage } from '../lib/utils';
-import { Plus, Check, Trash2, Clock, MessageCircle, Printer, Camera, RotateCcw, X, AlertTriangle, Download, AlertCircle, Search, Users } from 'lucide-react';
+import { formatCurrency, formatDate, formatWhatsAppUrl, compressImage, shareImageToWhatsApp } from '../lib/utils';
+import { Plus, Check, Trash2, Clock, MessageCircle, Printer, Camera, RotateCcw, X, AlertTriangle, Download, AlertCircle, Search, Users, Eye, ImageIcon } from 'lucide-react';
 import { useReactToPrint } from 'react-to-print';
 import { html2canvasWithOklch as html2canvas } from '../lib/html2canvas-helper';
 import jsPDF from 'jspdf';
@@ -28,7 +28,7 @@ export default function Repairs({ lang }: RepairsProps) {
   const t = translations[lang];
   const [isAdding, setIsAdding] = useState(false);
   const [currentImg, setCurrentImg] = useState<string | null>(null);
-  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [lightboxData, setLightboxData] = useState<{ src: string; title?: string; phone?: string; caption?: string } | null>(null);
   const [isContactPickerOpen, setIsContactPickerOpen] = useState(false);
   const [formData, setFormData] = useState<Partial<Repair>>({
     customerName: '',
@@ -449,14 +449,41 @@ export default function Repairs({ lang }: RepairsProps) {
                 </div>
 
                 {currentImg && (
-                  <div className="relative w-full sm:w-64 h-64 rounded-xl overflow-hidden border-2 border-gold shadow-lg animate-in zoom-in-95 duration-200 cursor-pointer group" onClick={() => setLightboxImage(currentImg)}>
+                  <div 
+                    className="relative w-full sm:w-64 h-64 rounded-xl overflow-hidden border-2 border-gold shadow-lg animate-in zoom-in-95 duration-200 cursor-pointer group" 
+                    onClick={() => setLightboxData({
+                      src: currentImg,
+                      title: formData.customerName ? `${formData.customerName} - ${formData.item || 'Repair'}` : (lang === 'ur' ? 'مرمت تصویر' : 'Repair Image'),
+                      phone: formData.customerPhone,
+                      caption: `*نفیس جیولرز - مرمت کی تفصیل*\nکسٹمر: ${formData.customerName || '-'}\nفون: ${formData.customerPhone || '-'}\nآئٹم: ${formData.item || '-'}\nمسئلہ: ${formData.issue || '-'}\nچارجز: Rs. ${(formData.charges || 0).toLocaleString()}`
+                    })}
+                  >
                     <img src={currentImg} alt="Preview" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); setCurrentImg(null); }}
-                      className="absolute top-2 right-2 p-2 bg-red-600 text-white rounded-full shadow-xl hover:bg-red-700 transition-colors z-10"
-                    >
-                      <RotateCcw size={16} />
-                    </button>
+                    <div className="absolute top-2 right-2 flex gap-1 z-10">
+                      <button 
+                        type="button"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          await shareImageToWhatsApp({
+                            imageSrc: currentImg,
+                            phone: formData.customerPhone,
+                            caption: `*نفیس جیولرز - مرمت کی تفصیل*\nکسٹمر: ${formData.customerName || '-'}\nفون: ${formData.customerPhone || '-'}\nآئٹم: ${formData.item || '-'}\nمسئلہ: ${formData.issue || '-'}\nچارجز: Rs. ${(formData.charges || 0).toLocaleString()}`,
+                            title: 'Repair Pic'
+                          });
+                        }}
+                        className="p-1.5 bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors shadow-md"
+                        title="WhatsApp Photo"
+                      >
+                        <MessageCircle size={14} />
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setCurrentImg(null); }}
+                        className="p-1.5 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors shadow-md"
+                      >
+                        <RotateCcw size={16} />
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -504,14 +531,43 @@ export default function Repairs({ lang }: RepairsProps) {
                 </p>
               )}
               {repair.img && (
-                <div className="flex justify-between text-sky-800 bg-sky-50 px-2 py-1 rounded-md border border-sky-100 text-sm">
-                  <span className="urdu-text text-xs">{lang === 'ur' ? 'تصویر' : 'Image'}:</span>
-                  <button 
-                    onClick={() => setLightboxImage(repair.img!)}
-                    className="p-0.5 px-2 bg-sky-200 text-sky-800 rounded font-bold text-xs hover:bg-sky-300 transition-colors"
-                  >
-                    {lang === 'ur' ? 'دیکھیں' : 'View'}
-                  </button>
+                <div className="flex items-center justify-between text-sky-800 bg-sky-50 px-2.5 py-1.5 rounded-lg border border-sky-100 text-sm">
+                  <span className="urdu-text text-xs font-bold flex items-center gap-1">
+                    <ImageIcon size={13} className="text-sky-600" />
+                    {lang === 'ur' ? 'تصویر:' : 'Image:'}
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button 
+                      type="button"
+                      onClick={() => setLightboxData({
+                        src: repair.img!,
+                        title: `${repair.customerName} - #${repair.id}`,
+                        phone: repair.customerPhone,
+                        caption: `*نفیس جیولرز - مرمت رسید*\nرسید نمبر: #${repair.id}\nکسٹمر: ${repair.customerName}\nآئٹم: ${repair.item}\nمسئلہ: ${repair.issue}\nچارجز: Rs. ${(repair.charges || 0).toLocaleString()}\nحالت: ${repair.status === 'Done' ? 'مکمل / تیار' : 'زیرِ مرمت'}`
+                      })}
+                      className="p-1 px-2 bg-sky-200 text-sky-900 rounded font-bold text-xs hover:bg-sky-300 transition-colors flex items-center gap-1"
+                    >
+                      <Eye size={12} />
+                      <span>{lang === 'ur' ? 'دیکھیں' : 'View'}</span>
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={async () => {
+                        const res = await shareImageToWhatsApp({
+                          imageSrc: repair.img!,
+                          phone: repair.customerPhone,
+                          caption: `*نفیس جیولرز - مرمت رسید*\nرسید نمبر: #${repair.id}\nکسٹمر: ${repair.customerName}\nآئٹم: ${repair.item}\nمسئلہ: ${repair.issue}\nچارجز: Rs. ${(repair.charges || 0).toLocaleString()}\nحالت: ${repair.status === 'Done' ? 'مکمل / تیار' : 'زیرِ مرمت'}`,
+                          title: `Repair #${repair.id} - ${repair.customerName}`
+                        });
+                        if (res.message) alert(res.message);
+                      }}
+                      className="p-1 px-2 bg-green-600 hover:bg-green-700 text-white rounded font-bold text-xs transition-colors flex items-center gap-1 shadow-sm"
+                      title={lang === 'ur' ? 'واٹس ایپ پر تصویر بھیجیں' : 'WhatsApp Photo'}
+                    >
+                      <MessageCircle size={12} />
+                      <span>{lang === 'ur' ? 'واٹس ایپ' : 'Share'}</span>
+                    </button>
+                  </div>
                 </div>
               )}
               <div className="flex justify-between text-sm">
@@ -580,8 +636,14 @@ export default function Repairs({ lang }: RepairsProps) {
         }}
         lang={lang}
       />
-      {lightboxImage && (
-        <ImageLightbox src={lightboxImage} onClose={() => setLightboxImage(null)} title={lang === 'ur' ? 'مرمت کی تصویر' : 'Repair Image'} />
+      {lightboxData && (
+        <ImageLightbox 
+          src={lightboxData.src} 
+          onClose={() => setLightboxData(null)} 
+          title={lightboxData.title || (lang === 'ur' ? 'مرمت کی تصویر' : 'Repair Image')} 
+          phone={lightboxData.phone}
+          caption={lightboxData.caption}
+        />
       )}
     </div>
   );

@@ -2,9 +2,9 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Sale, type GoldPurchase } from '../db';
 import { translations, type Language } from '../translations';
-import { Search, Printer, Trash2, Edit, MessageCircle, X, AlertTriangle, History, Download, AlertCircle, ShoppingCart, Tag, Eye } from 'lucide-react';
+import { Search, Printer, Trash2, Edit, MessageCircle, X, AlertTriangle, History, Download, AlertCircle, ShoppingCart, Tag, Eye, Check, Clock, ImageIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { formatWhatsAppUrl } from '../lib/utils';
+import { formatWhatsAppUrl, shareImageToWhatsApp } from '../lib/utils';
 import { useReactToPrint } from 'react-to-print';
 import { html2canvasWithOklch as html2canvas } from '../lib/html2canvas-helper';
 import jsPDF from 'jspdf';
@@ -30,10 +30,11 @@ export default function Records({ lang, setActiveSection, setEditingSale }: Reco
   const isUrdu = lang === 'ur';
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'sales' | 'purchases'>('sales');
+  const [baqayaFilter, setBaqayaFilter] = useState<'all' | 'pending' | 'cleared'>('all');
 
   const [printData, setPrintData] = useState<{ data: Sale | GoldPurchase, id: number, type: 'sale' | 'purchase' } | null>(null);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
-  const [viewImage, setViewImage] = useState<string | null>(null);
+  const [lightboxData, setLightboxData] = useState<{ src: string; title?: string; phone?: string; caption?: string } | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<{ id: number, type: 'sale' | 'purchase' } | null>(null);
@@ -166,15 +167,35 @@ export default function Records({ lang, setActiveSection, setEditingSale }: Reco
   }) || [];
 
   const sales = useMemo(() => {
-    if (!searchTerm.trim()) return rawSales;
-    const term = searchTerm.toLowerCase();
-    return rawSales.filter(sale => 
-      sale.name.toLowerCase().includes(term) || 
-      sale.phone.includes(searchTerm) ||
-      sale.id?.toString() === searchTerm ||
-      sale.items.some(item => item.n.toLowerCase().includes(term))
-    );
-  }, [rawSales, searchTerm]);
+    let result = rawSales;
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(sale => 
+        sale.name.toLowerCase().includes(term) || 
+        sale.phone.includes(searchTerm) ||
+        sale.id?.toString() === searchTerm ||
+        sale.items.some(item => item.n.toLowerCase().includes(term))
+      );
+    }
+    if (baqayaFilter === 'pending') {
+      result = result.filter(sale => (sale.rem || 0) > 0);
+    } else if (baqayaFilter === 'cleared') {
+      result = result.filter(sale => (sale.rem || 0) <= 0);
+    }
+    return result;
+  }, [rawSales, searchTerm, baqayaFilter]);
+
+  const { totalBaqayaCount, totalBaqayaAmount } = useMemo(() => {
+    let count = 0;
+    let amount = 0;
+    rawSales.forEach(s => {
+      if ((s.rem || 0) > 0) {
+        count += 1;
+        amount += (s.rem || 0);
+      }
+    });
+    return { totalBaqayaCount: count, totalBaqayaAmount: amount };
+  }, [rawSales]);
 
   const purchases = useMemo(() => {
     if (!searchTerm.trim()) return rawPurchases;
@@ -258,8 +279,14 @@ export default function Records({ lang, setActiveSection, setEditingSale }: Reco
   return (
     <div className="max-w-6xl mx-auto space-y-8 pb-12">
       {/* Image Modal */}
-      {viewImage && (
-        <ImageLightbox src={viewImage} onClose={() => setViewImage(null)} title={lang === 'ur' ? 'تصویر ریکارڈ' : 'Record Image'} />
+      {lightboxData && (
+        <ImageLightbox 
+          src={lightboxData.src} 
+          onClose={() => setLightboxData(null)} 
+          title={lightboxData.title || (lang === 'ur' ? 'تصویر ریکارڈ' : 'Record Image')} 
+          phone={lightboxData.phone}
+          caption={lightboxData.caption}
+        />
       )}
 
       <ConfirmModal 
@@ -386,21 +413,67 @@ export default function Records({ lang, setActiveSection, setEditingSale }: Reco
           </div>
         </div>
 
-        <div className="flex p-1 bg-sky-100 rounded-xl w-fit shadow-inner">
-          <button
-            onClick={() => setActiveTab('sales')}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold transition-all urdu-text ${activeTab === 'sales' ? "bg-white text-gold-dark shadow-md" : "text-sky-600 hover:bg-white-50"}`}
-          >
-            <ShoppingCart size={18} />
-            سیلز (Sales)
-          </button>
-          <button
-            onClick={() => setActiveTab('purchases')}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold transition-all urdu-text ${activeTab === 'purchases' ? "bg-white text-gold-dark shadow-md" : "text-sky-600 hover:bg-white-50"}`}
-          >
-            <Tag size={18} />
-            خریداری (Purchases)
-          </button>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex p-1 bg-sky-100 rounded-xl w-fit shadow-inner">
+            <button
+              onClick={() => setActiveTab('sales')}
+              className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold transition-all urdu-text ${activeTab === 'sales' ? "bg-white text-gold-dark shadow-md" : "text-sky-600 hover:bg-white-50"}`}
+            >
+              <ShoppingCart size={18} />
+              سیلز (Sales)
+            </button>
+            <button
+              onClick={() => setActiveTab('purchases')}
+              className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold transition-all urdu-text ${activeTab === 'purchases' ? "bg-white text-gold-dark shadow-md" : "text-sky-600 hover:bg-white-50"}`}
+            >
+              <Tag size={18} />
+              خریداری (Purchases)
+            </button>
+          </div>
+
+          {activeTab === 'sales' && (
+            <div className="flex flex-wrap items-center gap-2 bg-white p-1.5 rounded-xl border border-sky-200 shadow-sm">
+              <button
+                onClick={() => setBaqayaFilter('all')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all urdu-text ${
+                  baqayaFilter === 'all' 
+                    ? 'bg-zinc-800 text-white shadow-sm' 
+                    : 'text-zinc-600 hover:bg-zinc-100'
+                }`}
+              >
+                {lang === 'ur' ? 'تمام بل (All)' : 'All Invoices'}
+              </button>
+              <button
+                onClick={() => setBaqayaFilter('pending')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 urdu-text ${
+                  baqayaFilter === 'pending' 
+                    ? 'bg-red-600 text-white shadow-sm' 
+                    : 'text-red-700 bg-red-50 hover:bg-red-100 border border-red-200'
+                }`}
+              >
+                <AlertCircle size={14} />
+                <span>{lang === 'ur' ? 'صرف بقایا والے بل' : 'With Baqaya Balance'}</span>
+                {totalBaqayaCount > 0 && (
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                    baqayaFilter === 'pending' ? 'bg-white text-red-700' : 'bg-red-600 text-white'
+                  }`}>
+                    {totalBaqayaCount}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setBaqayaFilter('cleared')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 urdu-text ${
+                  baqayaFilter === 'cleared' 
+                    ? 'bg-emerald-600 text-white shadow-sm' 
+                    : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200'
+                }`}
+              >
+                <Check size={14} />
+                <span>{lang === 'ur' ? 'مکمل ادا شدہ' : 'Paid / Cleared'}</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -428,46 +501,85 @@ export default function Records({ lang, setActiveSection, setEditingSale }: Reco
                 <span className="text-xs text-zinc-500 urdu-text font-bold">{lang === 'ur' ? 'کل مزدوری:' : 'Total Mazdori Received:'}</span>
                 <span className="text-2xl font-black text-green-600">Rs. {Math.round(totalMazdoriReceived).toLocaleString()}</span>
               </div>
+              {totalBaqayaCount > 0 && (
+                <div className="flex flex-col flex-shrink-0 min-w-36 border-l border-red-200 pl-6 bg-red-50/50 -m-4 p-4 rounded-r-xl">
+                  <span className="text-xs text-red-600 urdu-text font-bold flex items-center gap-1">
+                    <AlertCircle size={12} />
+                    {lang === 'ur' ? 'کل بقایا رقم:' : 'Total Pending Baqaya:'}
+                  </span>
+                  <span className="text-2xl font-black text-red-600 font-mono">
+                    Rs. {totalBaqayaAmount.toLocaleString()}
+                  </span>
+                  <span className="text-[10px] text-red-500 font-bold urdu-text">
+                    ({totalBaqayaCount} {lang === 'ur' ? 'بلز پر بقایا ہے' : 'invoices unpaid'})
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {sales?.map((sale) => (
-              <div
-                key={sale.id}
-                className="bg-white rounded-xl shadow-sm border border-sky-200 overflow-hidden hover:shadow-md transition-shadow"
-              >
-                <div className="p-5 space-y-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="text-lg font-bold text-zinc-900 urdu-text">{sale.name}</h3>
-                      <p className="text-xs text-zinc-500" dir="ltr">{sale.phone}</p>
+            {sales?.map((sale) => {
+              const hasBaqaya = (sale.rem || 0) > 0;
+              return (
+                <div
+                  key={sale.id}
+                  className={`bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-all ${
+                    hasBaqaya 
+                      ? 'border-2 border-red-400 ring-2 ring-red-100' 
+                      : 'border border-sky-200'
+                  }`}
+                >
+                  <div className="p-5 space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-lg font-bold text-zinc-900 urdu-text">{sale.name}</h3>
+                          {hasBaqaya ? (
+                            <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-md text-[10px] font-black border border-red-300 flex items-center gap-0.5 urdu-text">
+                              <AlertCircle size={10} className="text-red-600" />
+                              بقایا
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-md text-[10px] font-bold border border-emerald-300 flex items-center gap-0.5 urdu-text">
+                              <Check size={10} className="text-emerald-700" />
+                              صاف
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-zinc-500" dir="ltr">{sale.phone}</p>
+                      </div>
+                      <div className="px-2 py-1 bg-sky-50 text-gold-dark rounded text-[10px] font-bold border border-gold-20 font-mono">
+                        #{sale.id}
+                      </div>
                     </div>
-                    <div className="px-2 py-1 bg-sky-50 text-gold-dark rounded text-[10px] font-bold border border-gold-20">
-                      #{sale.id}
-                    </div>
-                  </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <p className="text-[10px] text-zinc-500 uppercase font-bold">{t.date}</p>
-                      <p className="font-medium text-zinc-700">{sale.date}</p>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <p className="text-[10px] text-zinc-500 uppercase font-bold">{t.date}</p>
+                        <p className="font-medium text-zinc-700">{sale.date}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] text-zinc-500 uppercase font-bold">{t.totalAmount}</p>
+                        <p className="font-bold text-gold-dark font-mono">Rs. {sale.total.toLocaleString()}</p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-[10px] text-zinc-500 uppercase font-bold">{t.totalAmount}</p>
-                      <p className="font-bold text-gold-dark">Rs. {sale.total.toLocaleString()}</p>
-                    </div>
-                  </div>
 
-                  <div className="flex items-center justify-between p-2 bg-sky-50 rounded-lg text-xs border border-sky-100">
-                    <div>
-                      <span className="text-zinc-500 urdu-text">{t.receivedAmount}: </span>
-                      <span className="font-bold text-green-600">Rs. {sale.rec.toLocaleString()}</span>
+                    <div className={`flex items-center justify-between p-2.5 rounded-lg text-xs border ${
+                      hasBaqaya 
+                        ? 'bg-red-50 border-red-200' 
+                        : 'bg-sky-50 border-sky-100'
+                    }`}>
+                      <div>
+                        <span className="text-zinc-600 urdu-text">{t.receivedAmount}: </span>
+                        <span className="font-bold text-green-700 font-mono">Rs. {sale.rec.toLocaleString()}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-zinc-600 urdu-text">{t.remainingAmount}: </span>
+                        <span className={`font-black font-mono text-sm ${hasBaqaya ? 'text-red-600 font-bold' : 'text-zinc-400'}`}>
+                          Rs. {sale.rem.toLocaleString()}
+                        </span>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <span className="text-zinc-500 urdu-text">{t.remainingAmount}: </span>
-                      <span className="font-bold text-red-600">Rs. {sale.rem.toLocaleString()}</span>
-                    </div>
-                  </div>
 
                   {/* Items List inside the Record Card */}
                   {sale.items && sale.items.length > 0 && (
@@ -480,12 +592,35 @@ export default function Records({ lang, setActiveSection, setEditingSale }: Reco
                           <div key={idx} className="flex items-center justify-between p-2 bg-zinc-50 rounded-xl border border-zinc-100 text-xs">
                             <div className="flex items-center gap-2 overflow-hidden">
                               {item.img ? (
-                                <div 
-                                  onClick={() => setViewImage(item.img!)}
-                                  className="w-10 h-10 rounded-lg overflow-hidden border border-zinc-200 shadow-sm cursor-pointer flex-shrink-0"
-                                  title={lang === 'ur' ? 'تصویر دیکھیں' : 'View Image'}
-                                >
-                                  <img src={item.img} alt={item.n} className="w-full h-full object-cover" />
+                                <div className="relative group/recimg flex-shrink-0">
+                                  <div 
+                                    onClick={() => setLightboxData({
+                                      src: item.img!,
+                                      title: `${item.n} - ${sale.name} (#${sale.id})`,
+                                      phone: sale.phone,
+                                      caption: `*نفیس جیولرز - سیل ریکارڈ*\nبل نمبر: #${sale.id}\nگاہک: ${sale.name}\nآئٹم: ${item.n}\nوزن: ${item.w}g\nقیمت: Rs. ${item.t.toLocaleString()}\nتاریخ: ${sale.date}`
+                                    })}
+                                    className="w-10 h-10 rounded-lg overflow-hidden border border-zinc-200 shadow-sm cursor-pointer hover:border-gold transition-colors"
+                                    title={lang === 'ur' ? 'تصویر دیکھیں' : 'View Image'}
+                                  >
+                                    <img src={item.img} alt={item.n} className="w-full h-full object-cover" />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      await shareImageToWhatsApp({
+                                        imageSrc: item.img!,
+                                        phone: sale.phone,
+                                        caption: `*نفیس جیولرز - سیل ریکارڈ*\nبل نمبر: #${sale.id}\nگاہک: ${sale.name}\nآئٹم: ${item.n}\nوزن: ${item.w}g\nقیمت: Rs. ${item.t.toLocaleString()}\nتاریخ: ${sale.date}`,
+                                        title: item.n
+                                      });
+                                    }}
+                                    className="absolute -bottom-1 -right-1 p-0.5 bg-green-600 hover:bg-green-700 text-white rounded-full shadow transition-colors"
+                                    title="WhatsApp Photo"
+                                  >
+                                    <MessageCircle size={10} />
+                                  </button>
                                 </div>
                               ) : (
                                 <div className="w-10 h-10 rounded-lg bg-zinc-100 border border-zinc-200 flex items-center justify-center flex-shrink-0 text-[10px] text-zinc-400 font-bold font-nastaliq">
@@ -532,11 +667,40 @@ export default function Records({ lang, setActiveSection, setEditingSale }: Reco
                     </button>
                     {sale.items.some(i => i.img) && (
                       <button
-                        onClick={() => setViewImage(sale.items.find(i => i.img)?.img!)}
+                        onClick={() => {
+                          const firstImgItem = sale.items.find(i => i.img);
+                          if (firstImgItem?.img) {
+                            setLightboxData({
+                              src: firstImgItem.img,
+                              title: `${firstImgItem.n} - ${sale.name} (#${sale.id})`,
+                              phone: sale.phone,
+                              caption: `*نفیس جیولرز - سیل ریکارڈ*\nبل نمبر: #${sale.id}\nگاہک: ${sale.name}\nفون: ${sale.phone || '-'}\nکل رقم: Rs. ${sale.total.toLocaleString()}\nوصول: Rs. ${sale.rec.toLocaleString()}\nبقایا: Rs. ${sale.rem.toLocaleString()}`
+                            });
+                          }
+                        }}
                         className="p-2 bg-sky-50 text-sky-600 hover:bg-sky-600 hover:text-white rounded-lg transition-colors border border-sky-200"
                         title={lang === 'ur' ? 'تصویر دیکھیں' : 'View Image'}
                       >
                         <Eye size={16} />
+                      </button>
+                    )}
+                    {sale.items.some(i => i.img) && (
+                      <button
+                        onClick={async () => {
+                          const firstImgItem = sale.items.find(i => i.img);
+                          if (firstImgItem?.img) {
+                            await shareImageToWhatsApp({
+                              imageSrc: firstImgItem.img,
+                              phone: sale.phone,
+                              caption: `*نفیس جیولرز - سیل ریکارڈ*\nبل نمبر: #${sale.id}\nگاہک: ${sale.name}\nفون: ${sale.phone || '-'}\nکل رقم: Rs. ${sale.total.toLocaleString()}\nوصول: Rs. ${sale.rec.toLocaleString()}\nبقایا: Rs. ${sale.rem.toLocaleString()}`,
+                              title: `Bill #${sale.id} - ${sale.name}`
+                            });
+                          }
+                        }}
+                        className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg transition-colors border border-emerald-200"
+                        title={lang === 'ur' ? 'تصویر واٹس ایپ کریں' : 'WhatsApp Photo'}
+                      >
+                        <MessageCircle size={16} className="text-green-600" />
                       </button>
                     )}
                     <button
@@ -560,7 +724,8 @@ export default function Records({ lang, setActiveSection, setEditingSale }: Reco
                   </div>
                 </div>
               </div>
-            ))}
+            );
+            })}
             </div>
             {sales?.length === 0 && <EmptyState lang={lang} />}
           </motion.div>
@@ -613,11 +778,32 @@ export default function Records({ lang, setActiveSection, setEditingSale }: Reco
                     <div className="flex items-center gap-2 pt-2">
                     {p.img && (
                       <button
-                        onClick={() => setViewImage(p.img!)}
+                        onClick={() => setLightboxData({
+                          src: p.img!,
+                          title: `${p.name} (#${p.id}) - ${lang === 'ur' ? 'خریداری' : 'Purchase'}`,
+                          phone: p.phone,
+                          caption: `*نفیس جیولرز - سونا خریداری رسید*\nرسید نمبر: #${p.id}\nبیچنے والے کا نام: ${p.name}\nفون: ${p.phone || '-'}\nوزن: ${p.weight}g\nریٹ: Rs. ${p.rate.toLocaleString()}\nکل رقم: Rs. ${p.total.toLocaleString()}\nتاریخ: ${p.date}`
+                        })}
                         className="p-2 bg-sky-50 text-sky-600 hover:bg-sky-600 hover:text-white rounded-lg transition-colors border border-sky-200"
                         title={lang === 'ur' ? 'تصویر دیکھیں' : 'View Image'}
                       >
                         <Eye size={16} />
+                      </button>
+                    )}
+                    {p.img && (
+                      <button
+                        onClick={async () => {
+                          await shareImageToWhatsApp({
+                            imageSrc: p.img!,
+                            phone: p.phone,
+                            caption: `*نفیس جیولرز - سونا خریداری رسید*\nرسید نمبر: #${p.id}\nبیچنے والے کا نام: ${p.name}\nفون: ${p.phone || '-'}\nوزن: ${p.weight}g\nریٹ: Rs. ${p.rate.toLocaleString()}\nکل رقم: Rs. ${p.total.toLocaleString()}\nتاریخ: ${p.date}`,
+                            title: `Purchase #${p.id} - ${p.name}`
+                          });
+                        }}
+                        className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg transition-colors border border-emerald-200"
+                        title={lang === 'ur' ? 'تصویر واٹس ایپ کریں' : 'WhatsApp Photo'}
+                      >
+                        <MessageCircle size={16} className="text-green-600" />
                       </button>
                     )}
                     <button

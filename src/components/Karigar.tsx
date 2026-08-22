@@ -2,8 +2,8 @@ import React, { useState, useRef, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type KarigarRecord } from '../db';
 import { translations, type Language } from '../translations';
-import { formatCurrency, formatDate, formatWhatsAppUrl, compressImage } from '../lib/utils';
-import { Plus, Check, Trash2, Camera, RotateCcw, MessageCircle, Printer, Edit, Image as ImageIcon, AlertTriangle, X, Download, AlertCircle, Users, Search } from 'lucide-react';
+import { formatCurrency, formatDate, formatWhatsAppUrl, compressImage, shareImageToWhatsApp } from '../lib/utils';
+import { Plus, Check, Trash2, Camera, RotateCcw, MessageCircle, Printer, Edit, Image as ImageIcon, AlertTriangle, X, Download, AlertCircle, Users, Search, Eye } from 'lucide-react';
 import { useReactToPrint } from 'react-to-print';
 import { html2canvasWithOklch as html2canvas } from '../lib/html2canvas-helper';
 import jsPDF from 'jspdf';
@@ -28,7 +28,7 @@ export default function Karigar({ lang }: KarigarProps) {
   const t = translations[lang];
   const [editId, setEditId] = useState<number | null>(null);
   const [currentImg, setCurrentImg] = useState<string | null>(null);
-  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [lightboxData, setLightboxData] = useState<{ src: string; title?: string; phone?: string; caption?: string } | null>(null);
   const [isContactPickerOpen, setIsContactPickerOpen] = useState(false);
   
   const [formData, setFormData] = useState({
@@ -41,6 +41,7 @@ export default function Karigar({ lang }: KarigarProps) {
   });
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [baqayaFilter, setBaqayaFilter] = useState<'all' | 'pending' | 'cleared'>('all');
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [settlementData, setSettlementData] = useState<{ record: KarigarRecord; amount: number; date: string } | null>(null);
 
@@ -165,15 +166,47 @@ export default function Karigar({ lang }: KarigarProps) {
   }) || [];
 
   const karigars = useMemo(() => {
-    if (!searchTerm.trim()) return rawKarigars;
-    const term = searchTerm.toLowerCase();
-    return rawKarigars.filter(k => 
-      k.name.toLowerCase().includes(term) || 
-      k.phone.includes(searchTerm) ||
-      k.task.toLowerCase().includes(term) ||
-      k.id?.toString() === searchTerm
-    );
-  }, [rawKarigars, searchTerm]);
+    let result = rawKarigars;
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(k => 
+        k.name.toLowerCase().includes(term) || 
+        k.phone.includes(searchTerm) ||
+        k.task.toLowerCase().includes(term) ||
+        k.id?.toString() === searchTerm
+      );
+    }
+
+    if (baqayaFilter === 'pending') {
+      result = result.filter(k => (k.net - (k.receivedRemaining || 0)) > 0.005);
+    } else if (baqayaFilter === 'cleared') {
+      result = result.filter(k => (k.net - (k.receivedRemaining || 0)) <= 0.005);
+    }
+
+    return result;
+  }, [rawKarigars, searchTerm, baqayaFilter]);
+
+  const { totalGivenGold, totalReceivedGold, totalPendingGoldCount, totalPendingGoldWeight } = useMemo(() => {
+    let given = 0;
+    let rec = 0;
+    let count = 0;
+    let pendingWt = 0;
+    rawKarigars.forEach(k => {
+      given += (k.given || 0);
+      rec += (k.rec || 0);
+      const rem = (k.net || 0) - (k.receivedRemaining || 0);
+      if (rem > 0.005) {
+        count += 1;
+        pendingWt += rem;
+      }
+    });
+    return {
+      totalGivenGold: given,
+      totalReceivedGold: rec,
+      totalPendingGoldCount: count,
+      totalPendingGoldWeight: pendingWt
+    };
+  }, [rawKarigars]);
 
   const reCalc = () => {
     const g = formData.given || 0;
@@ -263,8 +296,13 @@ export default function Karigar({ lang }: KarigarProps) {
     if (url) window.open(url, '_blank');
   };
 
-  const showImg = (src: string) => {
-    setLightboxImage(src);
+  const showImg = (src: string, name?: string, phone?: string) => {
+    setLightboxData({
+      src,
+      title: name ? `${name} - ${lang === 'ur' ? 'لیبارٹری رپورٹ' : 'Lab Report'}` : (lang === 'ur' ? 'لیبارٹری رپورٹ' : 'Lab Report'),
+      phone,
+      caption: name ? `*نفیس جیولرز - کاریگر رپورٹ*\nکاریگر: ${name}` : undefined
+    });
   };
 
   const { res, net } = reCalc();
@@ -352,6 +390,33 @@ export default function Karigar({ lang }: KarigarProps) {
         message={lang === 'ur' ? 'کیا آپ واقعی اس ریکارڈ کو حذف کرنا چاہتے ہیں؟' : 'Are you sure you want to delete this record?'}
         lang={lang}
       />
+
+      {/* Karigar Stats Block */}
+      <div className="flex gap-6 p-4 bg-white border border-sky-200 rounded-xl shadow-sm overflow-x-auto mb-6">
+        <div className="flex flex-col flex-shrink-0 min-w-32">
+          <span className="text-xs text-zinc-500 urdu-text font-bold">{lang === 'ur' ? 'کُل دیا گیا سونا:' : 'Total Given Gold:'}</span>
+          <span className="text-2xl font-black text-gold-dark font-mono">{totalGivenGold.toFixed(2)}g</span>
+        </div>
+        <div className="flex flex-col flex-shrink-0 min-w-32 border-l border-sky-100 pl-6">
+          <span className="text-xs text-zinc-500 urdu-text font-bold">{lang === 'ur' ? 'کُل وصول سونا:' : 'Total Received Gold:'}</span>
+          <span className="text-2xl font-black text-sky-700 font-mono">{totalReceivedGold.toFixed(2)}g</span>
+        </div>
+        {totalPendingGoldCount > 0 && (
+          <div className="flex flex-col flex-shrink-0 min-w-40 border-l border-red-200 pl-6 bg-red-50/60 -my-4 py-4 pr-4 rounded-r-xl">
+            <span className="text-xs text-red-600 urdu-text font-bold flex items-center gap-1">
+              <AlertCircle size={12} />
+              {lang === 'ur' ? 'کُل بقایا سونا (کاریگر):' : 'Total Outstanding Gold:'}
+            </span>
+            <span className="text-2xl font-black text-red-600 font-mono">
+              {totalPendingGoldWeight.toFixed(2)}g
+            </span>
+            <span className="text-[10px] text-red-500 font-bold urdu-text">
+              ({totalPendingGoldCount} {lang === 'ur' ? 'کاریگروں کے پاس سونا بقایا ہے' : 'karigars with pending gold'})
+            </span>
+          </div>
+        )}
+      </div>
+
       <div className="bg-white p-6 rounded-xl shadow-sm border-t-4 border-gold mb-6 border border-sky-200">
         <h3 className="text-xl font-bold mb-4 urdu-text text-gold-dark"><i className="fas fa-hammer"></i> کاریگر انٹری (V68)</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -462,14 +527,41 @@ export default function Karigar({ lang }: KarigarProps) {
             </div>
 
             {currentImg && (
-              <div className="relative w-full sm:w-64 h-64 rounded-xl overflow-hidden border-2 border-gold shadow-lg animate-in zoom-in-95 duration-200 cursor-pointer group" onClick={() => setLightboxImage(currentImg)}>
+              <div 
+                className="relative w-full sm:w-64 h-64 rounded-xl overflow-hidden border-2 border-gold shadow-lg animate-in zoom-in-95 duration-200 cursor-pointer group" 
+                onClick={() => setLightboxData({
+                  src: currentImg,
+                  title: formData.name ? `${formData.name} - ${lang === 'ur' ? 'کاریگر تصویر' : 'Karigar Image'}` : (lang === 'ur' ? 'کاریگر تصویر' : 'Karigar Image'),
+                  phone: formData.phone,
+                  caption: `*نفیس جیولرز - کاریگر حساب*\nکاریگر: ${formData.name || '-'}\nفون: ${formData.phone || '-'}\nکام: ${formData.task || '-'}\nدیا گیا سونا: ${formData.given || 0}g\nواپسی: ${formData.rec || 0}g`
+                })}
+              >
                 <img src={currentImg} alt="Preview" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                <button 
-                  onClick={(e) => { e.stopPropagation(); setCurrentImg(null); }}
-                  className="absolute top-2 right-2 p-2 bg-red-600 text-white rounded-full shadow-xl hover:bg-red-700 transition-colors z-10"
-                >
-                  <RotateCcw size={16} />
-                </button>
+                <div className="absolute top-2 right-2 flex gap-1 z-10">
+                  <button 
+                    type="button"
+                    onClick={async (e) => { 
+                      e.stopPropagation(); 
+                      await shareImageToWhatsApp({
+                        imageSrc: currentImg,
+                        phone: formData.phone,
+                        caption: `*نفیس جیولرز - کاریگر حساب*\nکاریگر: ${formData.name || '-'}\nفون: ${formData.phone || '-'}\nکام: ${formData.task || '-'}\nدیا گیا سونا: ${formData.given || 0}g\nواپسی: ${formData.rec || 0}g`,
+                        title: `Karigar - ${formData.name}`
+                      });
+                    }}
+                    className="p-2 bg-green-600 text-white rounded-full shadow-xl hover:bg-green-700 transition-colors"
+                    title="WhatsApp Photo"
+                  >
+                    <MessageCircle size={16} />
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setCurrentImg(null); }}
+                    className="p-2 bg-red-600 text-white rounded-full shadow-xl hover:bg-red-700 transition-colors"
+                  >
+                    <RotateCcw size={16} />
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -483,7 +575,7 @@ export default function Karigar({ lang }: KarigarProps) {
         </button>
       </div>
 
-      <div className="mb-6 flex flex-col sm:flex-row gap-4 items-stretch sm:items-center bg-white p-4 rounded-xl border border-sky-200 shadow-sm">
+      <div className="mb-6 flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between bg-white p-4 rounded-xl border border-sky-200 shadow-sm">
         <div className="relative flex-1">
           <input 
             type="text" 
@@ -501,37 +593,113 @@ export default function Karigar({ lang }: KarigarProps) {
             </div>
           )}
         </div>
-        {searchTerm && (
-          <span className="bg-gold/10 text-gold-dark border border-gold/30 px-4 py-2 rounded-xl text-xs font-bold font-mono whitespace-nowrap self-center text-center">
-            {lang === 'ur' ? `${karigars?.length || 0} کاریگر ملے` : `${karigars?.length || 0} karigars found`}
-          </span>
-        )}
+
+        {/* Baqaya Filter Pills */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setBaqayaFilter('all')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all urdu-text ${
+              baqayaFilter === 'all' 
+                ? 'bg-zinc-800 text-white shadow-sm' 
+                : 'text-zinc-600 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200'
+            }`}
+          >
+            {lang === 'ur' ? 'تمام کاریگر (All)' : 'All Karigars'}
+          </button>
+          <button
+            onClick={() => setBaqayaFilter('pending')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 urdu-text ${
+              baqayaFilter === 'pending' 
+                ? 'bg-red-600 text-white shadow-sm' 
+                : 'text-red-700 bg-red-50 hover:bg-red-100 border border-red-200'
+            }`}
+          >
+            <AlertCircle size={14} />
+            <span>{lang === 'ur' ? 'صرف بقایا سونا والے' : 'With Pending Gold'}</span>
+            {totalPendingGoldCount > 0 && (
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                baqayaFilter === 'pending' ? 'bg-white text-red-700' : 'bg-red-600 text-white'
+              }`}>
+                {totalPendingGoldCount}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setBaqayaFilter('cleared')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 urdu-text ${
+              baqayaFilter === 'cleared' 
+                ? 'bg-emerald-600 text-white shadow-sm' 
+                : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200'
+            }`}
+          >
+            <Check size={14} />
+            <span>{lang === 'ur' ? 'مکمل کلیئر' : 'Cleared'}</span>
+          </button>
+
+          {searchTerm && (
+            <span className="bg-gold/10 text-gold-dark border border-gold/30 px-3 py-2 rounded-xl text-xs font-bold font-mono whitespace-nowrap self-center text-center">
+              {lang === 'ur' ? `${karigars?.length || 0} کاریگر ملے` : `${karigars?.length || 0} karigars found`}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="space-y-4">
         {karigars?.map((v) => {
           const outstandingGold = v.net - (v.receivedRemaining || 0);
+          const hasBaqaya = outstandingGold > 0.005;
           return (
             <div 
               key={v.id} 
-              className="bg-white p-4 rounded-xl border border-sky-200 shadow-sm border-r-8 border-gold"
+              className={`bg-white p-4 rounded-xl shadow-sm transition-all ${
+                hasBaqaya 
+                  ? 'border-2 border-red-400 ring-2 ring-red-100 border-r-8 border-r-red-500' 
+                  : 'border border-sky-200 border-r-8 border-r-emerald-500'
+              }`}
             >
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-bold urdu-text text-zinc-500">نام / تاریخ:</span>
-                <span className="text-sm text-zinc-900"><b>{v.name}</b> ({v.date})</span>
-              </div>
-              <div className="flex justify-between items-center mb-4">
-                <span className="text-sm font-bold urdu-text text-zinc-500">بقایا:</span>
-                {outstandingGold <= 0.005 ? (
-                  <span className="bg-emerald-100 text-emerald-800 text-xs px-3 py-1.5 rounded-full font-bold urdu-text border border-emerald-200">صاف کلیئر (Cleared)</span>
+              <div className="flex justify-between items-center mb-2 flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold urdu-text text-zinc-500">کاریگر / تاریخ:</span>
+                  <span className="text-sm text-zinc-900 font-bold">{v.name}</span>
+                  <span className="text-xs text-zinc-500 font-mono">({v.date})</span>
+                  {v.task && (
+                    <span className="px-2 py-0.5 bg-sky-50 text-sky-700 rounded text-[11px] font-bold border border-sky-100 urdu-text">
+                      {v.task}
+                    </span>
+                  )}
+                </div>
+                {hasBaqaya ? (
+                  <span className="px-2.5 py-1 bg-red-100 text-red-700 rounded-lg text-xs font-black border border-red-300 flex items-center gap-1 urdu-text">
+                    <AlertCircle size={12} className="text-red-600" />
+                    بقایا سونا: {outstandingGold.toFixed(2)}g
+                  </span>
                 ) : (
-                  <div className="flex flex-col items-end">
-                    <b className="text-red-600 text-lg">{outstandingGold.toFixed(2)}g</b>
-                    {v.receivedRemaining && v.receivedRemaining > 0 ? (
-                      <span className="text-[10px] text-zinc-500 font-bold urdu-text">کُل بقایا: {v.net.toFixed(2)}g | وصول شدہ: {v.receivedRemaining.toFixed(2)}g</span>
-                    ) : null}
-                  </div>
+                  <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-lg text-xs font-bold border border-emerald-300 flex items-center gap-1 urdu-text">
+                    <Check size={12} className="text-emerald-700" />
+                    صاف کلیئر
+                  </span>
                 )}
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 my-3 p-3 bg-zinc-50 rounded-xl border border-zinc-100 text-xs">
+                <div>
+                  <span className="text-zinc-500 block urdu-text">دیا گیا:</span>
+                  <span className="font-mono font-bold text-zinc-800">{v.given}g</span>
+                </div>
+                <div>
+                  <span className="text-zinc-500 block urdu-text">واپسی وصول:</span>
+                  <span className="font-mono font-bold text-green-700">{v.rec}g</span>
+                </div>
+                <div>
+                  <span className="text-zinc-500 block urdu-text">کاٹ / کھاد:</span>
+                  <span className="font-mono font-bold text-sky-700">{v.kaat}g</span>
+                </div>
+                <div>
+                  <span className="text-zinc-500 block urdu-text">خالص بقایا سونا:</span>
+                  <span className={`font-mono font-black text-sm ${hasBaqaya ? 'text-red-600' : 'text-emerald-600'}`}>
+                    {outstandingGold.toFixed(2)}g
+                  </span>
+                </div>
               </div>
               
               <div className="flex gap-2 pt-4 border-t border-sky-100 flex-wrap">
@@ -575,10 +743,32 @@ export default function Karigar({ lang }: KarigarProps) {
                 </button>
                 {v.img && (
                   <button 
-                    onClick={() => showImg(v.img!)}
-                    className="flex-1 min-w-[80px] p-2 bg-sky-50 text-zinc-600 rounded-lg hover:bg-sky-100 transition-all text-xs font-bold urdu-text flex items-center justify-center gap-1 border border-sky-100"
+                    onClick={() => setLightboxData({
+                      src: v.img!,
+                      title: `${v.name} - ${lang === 'ur' ? 'لیبارٹری رپورٹ' : 'Lab Report'}`,
+                      phone: v.phone,
+                      caption: `*نفیس جیولرز - کاریگر رپورٹ*\nکاریگر: ${v.name}\nفون: ${v.phone || '-'}\nکام: ${v.task || '-'}\nدیا گیا سونا: ${v.given}g\nواپسی: ${v.rec}g\nبقایا سونا: ${parseFloat(outstandingGold.toFixed(2))}g`
+                    })}
+                    className="flex-1 min-w-[80px] p-2 bg-sky-50 text-sky-700 rounded-lg hover:bg-sky-100 transition-all text-xs font-bold urdu-text flex items-center justify-center gap-1 border border-sky-100"
+                    title={lang === 'ur' ? 'رپورٹ / تصویر دیکھیں' : 'View Report / Image'}
                   >
-                    <ImageIcon size={14} /> رپورٹ
+                    <Eye size={14} /> رپورٹ
+                  </button>
+                )}
+                {v.img && (
+                  <button 
+                    onClick={async () => {
+                      await shareImageToWhatsApp({
+                        imageSrc: v.img!,
+                        phone: v.phone,
+                        caption: `*نفیس جیولرز - کاریگر رپورٹ*\nکاریگر: ${v.name}\nفون: ${v.phone || '-'}\nکام: ${v.task || '-'}\nدیا گیا سونا: ${v.given}g\nواپسی: ${v.rec}g\nبقایا سونا: ${parseFloat(outstandingGold.toFixed(2))}g`,
+                        title: `Karigar Report - ${v.name}`
+                      });
+                    }}
+                    className="flex-1 min-w-[80px] p-2 bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-600 hover:text-white transition-all text-xs font-bold urdu-text flex items-center justify-center gap-1 border border-emerald-100"
+                    title={lang === 'ur' ? 'تصویر واٹس ایپ کریں' : 'WhatsApp Photo'}
+                  >
+                    <MessageCircle size={14} className="text-green-600" /> فوٹو
                   </button>
                 )}
                 <button 
@@ -680,8 +870,14 @@ export default function Karigar({ lang }: KarigarProps) {
           </div>
         </div>
       )}
-      {lightboxImage && (
-        <ImageLightbox src={lightboxImage} onClose={() => setLightboxImage(null)} title={lang === 'ur' ? 'لیبارٹری رپورٹ' : 'Lab Report'} />
+      {lightboxData && (
+        <ImageLightbox 
+          src={lightboxData.src} 
+          onClose={() => setLightboxData(null)} 
+          title={lightboxData.title || (lang === 'ur' ? 'لیبارٹری رپورٹ' : 'Lab Report')} 
+          phone={lightboxData.phone}
+          caption={lightboxData.caption}
+        />
       )}
     </div>
   );
