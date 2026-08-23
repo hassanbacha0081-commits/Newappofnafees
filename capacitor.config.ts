@@ -6,7 +6,7 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   server: {
     androidScheme: 'https',
-    hostname: 'localhost'
+    hostname: 'ais-dev-uz267oiejfw3va6zuna3qo-561263034534.asia-southeast1.run.app'
   }
 };
 
