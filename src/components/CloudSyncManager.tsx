@@ -112,6 +112,22 @@ export default function CloudSyncManager({ lang, onSafetyBackup }: CloudSyncMana
     return () => unsub();
   }, []);
 
+  const formatAuthError = (err: any): string => {
+    if (!err) return '';
+    if (err.code === 'auth/unauthorized-domain' || err.message?.includes('unauthorized-domain')) {
+      return isUrdu
+        ? 'غلطی: فائر بیس کنسول میں "localhost" یا ڈومین کی اجازت درکار ہے۔ براہ کرم فائر بیس کنسول -> Authentication -> Settings -> Authorized Domains میں "localhost" شامل کریں۔'
+        : 'Firebase Error: "localhost" is not added to Authorized Domains in Firebase Console. Please add "localhost" under Firebase Console → Authentication → Settings → Authorized domains.';
+    }
+    if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
+      return isUrdu ? 'غلط ای میل یا پاس ورڈ درج کیا گیا ہے۔' : 'Invalid email or password.';
+    }
+    if (err.code === 'auth/network-request-failed') {
+      return isUrdu ? 'انٹرنیٹ کنکشن کا مسئلہ ہے۔ برائے مہربانی انٹرنیٹ چیک کریں۔' : 'Network error. Please check your internet connection.';
+    }
+    return err.message || 'Authentication error';
+  };
+
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!emailInput || !passwordInput) return;
@@ -124,10 +140,10 @@ export default function CloudSyncManager({ lang, onSafetyBackup }: CloudSyncMana
         try {
           await createUserWithEmailAndPassword(auth, emailInput, passwordInput);
         } catch (regErr: any) {
-          setAuthError(regErr.message || 'Authentication error');
+          setAuthError(formatAuthError(regErr));
         }
       } else {
-        setAuthError(err.message || 'Authentication error');
+        setAuthError(formatAuthError(err));
       }
     } finally {
       setAuthLoading(false);
@@ -140,7 +156,7 @@ export default function CloudSyncManager({ lang, onSafetyBackup }: CloudSyncMana
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (err: any) {
-      setAuthError(err.message || 'Google sign-in error');
+      setAuthError(formatAuthError(err));
     } finally {
       setAuthLoading(false);
     }
