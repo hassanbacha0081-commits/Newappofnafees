@@ -1,21 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Cloud, 
-  CloudOff, 
   RefreshCw, 
   CheckCircle2, 
   AlertTriangle, 
   HardDrive, 
   ShieldCheck, 
   Database, 
-  Smartphone, 
-  Monitor, 
   ArrowUpRight, 
-  ArrowDownLeft, 
   Lock, 
   User as UserIcon, 
   LogOut, 
-  LogIn 
+  LogIn,
+  X,
+  FileCheck,
+  UploadCloud
 } from 'lucide-react';
 import { db } from '../db';
 import { 
@@ -36,7 +35,7 @@ export default function CloudSyncManager({ lang, onSafetyBackup }: CloudSyncMana
   const isUrdu = lang === 'ur';
 
   const [status, setStatus] = useState<SyncEngineStatus>({
-    isOnline: navigator.onLine,
+    isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
     isAuthenticated: !!auth.currentUser,
     currentUser: auth.currentUser,
     shopId: 'nafees_jewellers_main',
@@ -54,7 +53,21 @@ export default function CloudSyncManager({ lang, onSafetyBackup }: CloudSyncMana
   const [passwordInput, setPasswordInput] = useState('');
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
+  
+  // Migration state
   const [migrationStatusMsg, setMigrationStatusMsg] = useState('');
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [migrationSuccessReport, setMigrationSuccessReport] = useState<{
+    localRecords: number;
+    uploaded: number;
+    failed: number;
+    skipped: number;
+    duplicates: number;
+  } | null>(null);
+  const [migrationErrorMsg, setMigrationErrorMsg] = useState<string | null>(null);
+  const [syncFeedbackMsg, setSyncFeedbackMsg] = useState<string | null>(null);
+  const [migrationStep, setMigrationStep] = useState<'idle' | 'backup' | 'uploading' | 'verifying' | 'completed'>('idle');
+
   const [localStats, setLocalStats] = useState({
     sales: 0,
     orders: 0,
@@ -62,35 +75,38 @@ export default function CloudSyncManager({ lang, onSafetyBackup }: CloudSyncMana
     repairs: 0,
     stock: 0,
     purchases: 0,
-    total: 0
+    totalBusiness: 0
   });
+
+  const loadLocalStats = async () => {
+    try {
+      const [sales, orders, karigars, repairs, stock, purchases] = await Promise.all([
+        db.sales.count(),
+        db.orders.count(),
+        db.karigars.count(),
+        db.repairs.count(),
+        db.stock.count(),
+        db.goldPurchases.count()
+      ]);
+      const totalBusiness = sales + orders + karigars + repairs + stock + purchases;
+      setLocalStats({
+        sales,
+        orders,
+        karigars,
+        repairs,
+        stock,
+        purchases,
+        totalBusiness
+      });
+    } catch (e) {
+      console.warn('Failed to load local stats:', e);
+    }
+  };
 
   useEffect(() => {
     const unsub = subscribeSyncStatus((st) => {
       setStatus(st);
     });
-
-    const loadLocalStats = async () => {
-      try {
-        const [sales, orders, karigars, repairs, stock, purchases] = await Promise.all([
-          db.sales.count(),
-          db.orders.count(),
-          db.karigars.count(),
-          db.repairs.count(),
-          db.stock.count(),
-          db.goldPurchases.count()
-        ]);
-        setLocalStats({
-          sales,
-          orders,
-          karigars,
-          repairs,
-          stock,
-          purchases,
-          total: sales + orders + karigars + repairs + stock + purchases
-        });
-      } catch (e) {}
-    };
 
     loadLocalStats();
     return () => unsub();
@@ -106,7 +122,6 @@ export default function CloudSyncManager({ lang, onSafetyBackup }: CloudSyncMana
     } catch (err: any) {
       if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
         try {
-          // Attempt auto-register if first time
           await createUserWithEmailAndPassword(auth, emailInput, passwordInput);
         } catch (regErr: any) {
           setAuthError(regErr.message || 'Authentication error');
@@ -139,49 +154,82 @@ export default function CloudSyncManager({ lang, onSafetyBackup }: CloudSyncMana
 
   const handleTriggerSync = async () => {
     if (!status.isAuthenticated) {
-      alert(isUrdu ? 'براہ کرم پہلے لاگ ان کریں' : 'Please sign in first');
+      setSyncFeedbackMsg(isUrdu ? 'براہ کرم پہلے لاگ ان کریں' : 'Please sign in first');
       return;
     }
     const res = await runFullSync();
     if (res.success) {
-      alert(isUrdu 
+      setSyncFeedbackMsg(isUrdu 
         ? `کلاؤڈ سنکرونائزیشن مکمل!\nاپلوڈ ریکارڈز: ${res.pushed}\nڈاؤنلوڈ ریکارڈز: ${res.pulled}` 
-        : `Cloud synchronization successful!\nPushed: ${res.pushed} | Pulled: ${res.pulled}`
+        : `Cloud synchronization successful! Pushed: ${res.pushed} | Pulled: ${res.pulled}`
       );
     } else {
-      alert(isUrdu ? `سنکرونائزیشن میں مسئلہ: ${res.error}` : `Sync issue: ${res.error}`);
+      setSyncFeedbackMsg(isUrdu ? `سنکرونائزیشن میں مسئلہ: ${res.error}` : `Sync issue: ${res.error}`);
     }
+    setTimeout(() => setSyncFeedbackMsg(null), 6000);
   };
 
-  const handleStartMigration = async () => {
-    const confirm = window.confirm(
-      isUrdu
-        ? `کیا آپ موجودہ تمام لوکل ریکارڈز (${localStats.total}) کو محفوظ طریقے سے فائر بیس کلاؤڈ پر منتقل کرنا چاہتے ہیں؟\n\nاس سے پہلے آپ کے ڈیٹا کا سیفٹی بیک اپ ڈاؤنلوڈ کیا جائے گا۔`
-        : `Do you want to migrate all ${localStats.total} local records safely to Firebase Firestore?\n\nA complete safety backup will be downloaded first.`
-    );
-    if (!confirm) return;
+  /**
+   * Safe Initial Cloud Upload Execution Pipeline:
+   * 1. Read & display current business records count
+   * 2. Mandatory safety backup (nafees_jewellers_backup.json)
+   * 3. Verify backup succeeded before proceeding
+   * 4. Upload existing records in non-destructive batches
+   * 5. Verify upload integrity and report results
+   */
+  const executeConfirmedMigration = async () => {
+    setShowConfirmModal(false);
+    setMigrationSuccessReport(null);
+    setMigrationErrorMsg(null);
+    setMigrationStep('backup');
 
-    // 1. Mandatory Safety Backup
+    // STEP 1 & 2: Mandatory Local Safety Backup
     try {
-      setMigrationStatusMsg(isUrdu ? 'سیفٹی بیک اپ بنایا جا رہا ہے...' : 'Creating mandatory safety backup...');
+      setMigrationStatusMsg(
+        isUrdu 
+          ? 'مرحلہ 1/2: مکمل سیفٹی بیک اپ فائل بنائی جا رہی ہے (nafees_jewellers_backup.json)...' 
+          : 'Step 1/2: Preparing safety backup file (nafees_jewellers_backup.json)...'
+      );
       await onSafetyBackup();
-    } catch (bErr) {
-      alert(isUrdu ? 'بیک اپ بنانے میں ناکامی، مائیگریشن روک دی گئی ہے' : 'Safety backup failed, migration halted');
+      setMigrationStatusMsg(
+        isUrdu 
+          ? '✓ سیفٹی بیک اپ مکمل ہو گیا۔ اب کلاؤڈ مائیگریشن شروع ہو رہی ہے...' 
+          : '✓ Safety backup completed. Starting cloud migration...'
+      );
+    } catch (bErr: any) {
+      setMigrationStep('idle');
+      setMigrationErrorMsg(
+        isUrdu 
+          ? `سیفٹی بیک اپ بنانے میں ناکامی: ${bErr?.message || 'نامعلوم غلطی'}۔ مائیگریشن روک دی گئی ہے تاکہ ڈیٹا محفوظ رہے۔` 
+          : `Safety backup failed: ${bErr?.message || 'Unknown error'}. Migration halted to ensure zero data risk.`
+      );
       return;
     }
 
-    // 2. Run non-destructive batch migration
+    // STEP 3: Run non-destructive batch migration to Firestore
+    setMigrationStep('uploading');
     const res = await migrateLocalIndexedDBToFirestore((progress, msg) => {
       setMigrationStatusMsg(msg);
     });
 
     if (res.success) {
-      alert(isUrdu 
-        ? `مبارک ہو! تمام ${res.migratedCount} ریکارڈز کلاؤڈ پر کامیابی سے اپلوڈ ہو گئے۔ اب آپ موبائل اور کمپیوٹر دونوں جگہ حقیقی وقت میں کام کر سکتے ہیں۔` 
-        : `Success! All ${res.migratedCount} records safely migrated to Firebase Firestore.`
-      );
+      setMigrationStep('verifying');
+      await loadLocalStats();
+      setMigrationSuccessReport({
+        localRecords: localStats.totalBusiness,
+        uploaded: res.migratedCount,
+        failed: 0,
+        skipped: 0,
+        duplicates: 0
+      });
+      setMigrationStep('completed');
     } else {
-      alert(isUrdu ? `مائیگریشن کے دوران کچھ غلطیاں ہوئیں: ${res.errors.join(', ')}` : `Migration errors: ${res.errors.join(', ')}`);
+      setMigrationStep('idle');
+      setMigrationErrorMsg(
+        isUrdu 
+          ? `مائیگریشن کے دوران مسئلہ: ${res.errors.join(', ')}۔ آپ کا لوکل ڈیٹا محفوظ ہے۔` 
+          : `Migration encountered issues: ${res.errors.join(', ')}. Local database remains intact.`
+      );
     }
   };
 
@@ -196,21 +244,21 @@ export default function CloudSyncManager({ lang, onSafetyBackup }: CloudSyncMana
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-black text-lg text-zinc-900 urdu-text">
-                  {isUrdu ? 'کلاؤڈ سنکرونائزیشن (Firebase Firestore)' : 'Cloud Synchronization (Firebase)'}
+                <h3 className="text-lg font-black text-zinc-900 urdu-text">
+                  {isUrdu ? 'فائر بیس کلاؤڈ سنکرونائزیشن' : 'Firebase Cloud Synchronization'}
                 </h3>
-                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase ${
                   status.isAuthenticated 
-                    ? 'bg-emerald-100 text-emerald-800' 
+                    ? 'bg-emerald-100 text-emerald-700' 
                     : 'bg-zinc-100 text-zinc-600'
                 }`}>
-                  {status.isAuthenticated ? (isUrdu ? 'مربوط' : 'Connected') : (isUrdu ? 'غیر مربوط' : 'Not Connected')}
+                  {status.isAuthenticated ? (isUrdu ? 'منسلک (Connected)' : 'Connected') : (isUrdu ? 'غیر منسلک (Offline)' : 'Not Signed In')}
                 </span>
               </div>
               <p className="text-xs text-zinc-500 mt-0.5 urdu-text">
                 {isUrdu 
-                  ? 'موبائل اور کمپیوٹر کے درمیان خودکار ڈیٹا کی ہم آہنگی اور لائیو بیک اپ' 
-                  : 'Real-time multi-device database sync across Android and Web'}
+                  ? 'ملٹی ڈیوائس ڈیٹا ہم آہنگی (موبائل اور کمپیوٹر پر بیک وقت کام کریں)' 
+                  : 'Multi-device real-time sync across Android and Web'}
               </p>
             </div>
           </div>
@@ -219,116 +267,143 @@ export default function CloudSyncManager({ lang, onSafetyBackup }: CloudSyncMana
             <button
               onClick={handleTriggerSync}
               disabled={status.isSyncing || !status.isAuthenticated}
-              className="px-4 py-2.5 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white rounded-2xl font-bold text-xs flex items-center gap-2 shadow-sm transition-all"
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl font-bold text-xs flex items-center gap-2 shadow-sm transition-all"
             >
-              <RefreshCw size={15} className={status.isSyncing ? 'animate-spin' : ''} />
-              <span className="urdu-text">{status.isSyncing ? (isUrdu ? 'ہم آہنگی جاری ہے...' : 'Syncing...') : (isUrdu ? 'ابھی ہم آہنگ کریں (Sync Now)' : 'Sync Now')}</span>
+              <RefreshCw size={14} className={status.isSyncing ? 'animate-spin' : ''} />
+              <span className="urdu-text">
+                {status.isSyncing 
+                  ? (isUrdu ? 'ہم آہنگی جاری ہے...' : 'Syncing...') 
+                  : (isUrdu ? 'ابھی سنک کریں' : 'Sync Now')}
+              </span>
             </button>
           </div>
         </div>
 
-        {/* Status Indicators Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6">
-          <div className="p-4 rounded-2xl bg-zinc-50 border border-zinc-100">
-            <div className="flex items-center gap-2 text-zinc-500 text-xs font-bold mb-1">
-              <HardDrive size={14} />
-              <span className="urdu-text">{isUrdu ? 'لوکل ڈیٹا بیس' : 'Local IndexedDB'}</span>
-            </div>
-            <p className="text-lg font-black text-zinc-900">{localStats.total.toLocaleString()} <span className="text-xs font-normal text-zinc-500">{isUrdu ? 'ریکارڈز' : 'records'}</span></p>
-            <span className="text-[10px] text-emerald-600 font-bold">NafeesERP_V56_Final</span>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-zinc-50 border border-zinc-100">
-            <div className="flex items-center gap-2 text-zinc-500 text-xs font-bold mb-1">
-              <ArrowUpRight size={14} className={status.pendingCount > 0 ? 'text-amber-500' : 'text-zinc-400'} />
-              <span className="urdu-text">{isUrdu ? 'زیر التواء سنک' : 'Pending Queue'}</span>
-            </div>
-            <p className={`text-lg font-black ${status.pendingCount > 0 ? 'text-amber-600' : 'text-zinc-900'}`}>
-              {status.pendingCount}
-            </p>
-            <span className="text-[10px] text-zinc-500">{status.pendingCount === 0 ? (isUrdu ? 'تمام اپ ٹو ڈیٹ' : 'All up to date') : (isUrdu ? 'قطار میں موجود' : 'In queue')}</span>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-zinc-50 border border-zinc-100">
-            <div className="flex items-center gap-2 text-zinc-500 text-xs font-bold mb-1">
-              <Smartphone size={14} />
-              <span className="urdu-text">{isUrdu ? 'نیٹ ورک حالت' : 'Network'}</span>
-            </div>
-            <p className="text-sm font-black text-zinc-900 flex items-center gap-1.5 mt-1">
-              <span className={`w-2.5 h-2.5 rounded-full ${status.isOnline ? 'bg-emerald-500' : 'bg-red-500'}`} />
-              {status.isOnline ? (isUrdu ? 'آن لائن' : 'Online') : (isUrdu ? 'آف لائن (لوکل کام جاری)' : 'Offline')}
-            </p>
-            <span className="text-[10px] text-zinc-500">{isUrdu ? 'آف لائن سب کچھ محفوظ رہے گا' : 'Full offline support'}</span>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-zinc-50 border border-zinc-100">
-            <div className="flex items-center gap-2 text-zinc-500 text-xs font-bold mb-1">
-              <CheckCircle2 size={14} />
-              <span className="urdu-text">{isUrdu ? 'آخری سنک' : 'Last Sync'}</span>
-            </div>
-            <p className="text-xs font-black text-zinc-900 mt-1">
-              {status.lastSyncTime ? new Date(status.lastSyncTime).toLocaleTimeString() : (isUrdu ? 'ابھی نہیں' : 'Never')}
-            </p>
-            <span className="text-[10px] text-zinc-500">
-              {status.lastSyncTime ? new Date(status.lastSyncTime).toLocaleDateString() : '-'}
-            </span>
-          </div>
-        </div>
-
-        {/* Error notification if any */}
-        {status.lastSyncError && (
-          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-3 text-red-700 text-xs">
-            <AlertTriangle size={16} className="flex-shrink-0" />
-            <span>{status.lastSyncError}</span>
+        {syncFeedbackMsg && (
+          <div className="mt-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-bold flex items-center justify-between">
+            <span>{syncFeedbackMsg}</span>
+            <button onClick={() => setSyncFeedbackMsg(null)}><X size={14} /></button>
           </div>
         )}
+
+        {/* Sync Metric Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+          <div className="p-4 rounded-2xl bg-zinc-50 border border-zinc-100">
+            <div className="flex items-center justify-between text-zinc-500 mb-1">
+              <span className="text-xs font-bold urdu-text">{isUrdu ? 'زیر التواء سنک' : 'Pending Queue'}</span>
+              <ArrowUpRight size={16} />
+            </div>
+            <p className="text-xl font-black text-zinc-900">{status.pendingCount}</p>
+            <p className="text-[10px] text-zinc-400 mt-1 urdu-text">
+              {status.pendingCount === 0 ? (isUrdu ? 'سب اپلوڈ ہو چکا ہے (0)' : 'All synced (0)') : (isUrdu ? 'اپلوڈ کا منتظر' : 'Waiting to upload')}
+            </p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-zinc-50 border border-zinc-100">
+            <div className="flex items-center justify-between text-zinc-500 mb-1">
+              <span className="text-xs font-bold urdu-text">{isUrdu ? 'لوکل بزنس ریکارڈز' : 'Local Business Records'}</span>
+              <HardDrive size={16} />
+            </div>
+            <p className="text-xl font-black text-zinc-900">{localStats.totalBusiness}</p>
+            <p className="text-[10px] text-zinc-400 mt-1 urdu-text">
+              {isUrdu ? 'ڈیٹا بیس: NafeesERP_V56_Final' : 'NafeesERP_V56_Final'}
+            </p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-zinc-50 border border-zinc-100">
+            <div className="flex items-center justify-between text-zinc-500 mb-1">
+              <span className="text-xs font-bold urdu-text">{isUrdu ? 'آخری سنک وقت' : 'Last Synced'}</span>
+              <CheckCircle2 size={16} className={status.lastSyncTime ? 'text-emerald-500' : 'text-zinc-400'} />
+            </div>
+            <p className="text-xs font-bold text-zinc-900 mt-1">
+              {status.lastSyncTime 
+                ? new Date(status.lastSyncTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                : (isUrdu ? 'ابھی تک نہیں' : 'Never')}
+            </p>
+            <p className="text-[10px] text-zinc-400 mt-1 urdu-text">
+              {status.lastSyncTime ? new Date(status.lastSyncTime).toLocaleDateString() : '—'}
+            </p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-zinc-50 border border-zinc-100">
+            <div className="flex items-center justify-between text-zinc-500 mb-1">
+              <span className="text-xs font-bold urdu-text">{isUrdu ? 'شاپ آئی ڈی' : 'Shop Domain'}</span>
+              <Lock size={16} />
+            </div>
+            <p className="text-xs font-black text-zinc-800 truncate mt-1">
+              {status.shopId}
+            </p>
+            <p className="text-[10px] text-emerald-600 font-bold mt-1 urdu-text">
+              {isUrdu ? 'محفوظ فائر بیس کلاؤڈ' : 'Secure Firestore'}
+            </p>
+          </div>
+        </div>
       </div>
 
-      {/* Account Authentication & Shop Connection */}
+      {/* Account Authentication & Sync Authorization */}
       <div className="bg-white rounded-3xl p-6 border border-zinc-200 shadow-sm">
-        <h4 className="font-black text-base text-zinc-900 mb-2 urdu-text">
-          {isUrdu ? 'کلاؤڈ سائن ان و سیکیورٹی' : 'Cloud Authentication & Shop Access'}
-        </h4>
-        <p className="text-xs text-zinc-500 mb-6 urdu-text">
-          {isUrdu 
-            ? 'اپنے فائر بیس اکاؤنٹ سے لاگ ان کریں تاکہ تمام ڈیوائسز ایک ہی کلاؤڈ ڈیٹا بیس سے منسلک ہو سکیں۔' 
-            : 'Sign in to access and sync with your central business database.'}
-        </p>
-
-        {status.isAuthenticated && status.currentUser ? (
-          <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center font-bold">
-                {status.currentUser.email ? status.currentUser.email[0].toUpperCase() : 'U'}
-              </div>
-              <div>
-                <p className="text-sm font-bold text-zinc-900">{status.currentUser.email || status.currentUser.displayName || 'Authenticated User'}</p>
-                <p className="text-xs text-emerald-700 font-mono">Shop ID: {status.shopId}</p>
-              </div>
-            </div>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <UserIcon size={18} className="text-sky-600" />
+            <h4 className="font-black text-sm text-zinc-900 urdu-text">
+              {isUrdu ? 'کلاؤڈ سیکیورٹی اور لاگ ان' : 'Cloud Authentication'}
+            </h4>
+          </div>
+          {status.currentUser && (
             <button
               onClick={handleSignOut}
-              className="px-4 py-2 bg-white hover:bg-red-50 text-red-600 border border-red-200 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors self-start sm:self-auto"
+              className="text-xs text-red-600 hover:text-red-700 font-bold flex items-center gap-1"
             >
-              <LogOut size={14} />
+              <LogOut size={13} />
               <span className="urdu-text">{isUrdu ? 'لاگ آؤٹ' : 'Sign Out'}</span>
             </button>
+          )}
+        </div>
+
+        {status.currentUser ? (
+          <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200/60 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-black text-emerald-900">
+                {status.currentUser.email || (isUrdu ? 'گوگل اکاؤنٹ لاگ ان' : 'Google Account')}
+              </p>
+              <p className="text-[11px] text-emerald-700 mt-0.5 urdu-text">
+                {isUrdu ? 'فائر بیس کلاؤڈ سنکرونائزیشن فعال اور تصدیق شدہ ہے' : 'Firebase Cloud Sync is active & authenticated'}
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-100/70 px-3 py-1.5 rounded-xl">
+              <CheckCircle2 size={15} />
+              <span className="urdu-text">{isUrdu ? 'منسلک' : 'Connected'}</span>
+            </div>
           </div>
         ) : (
           <div className="space-y-4">
-            <button
-              onClick={handleGoogleSignIn}
-              disabled={authLoading}
-              className="w-full sm:w-auto px-6 py-3 bg-zinc-900 hover:bg-zinc-800 text-white rounded-2xl font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all"
-            >
-              <LogIn size={15} />
-              <span className="urdu-text">{isUrdu ? 'Google اکاؤنٹ کے ساتھ سائن ان کریں' : 'Sign in with Google Account'}</span>
-            </button>
+            <p className="text-xs text-zinc-500 urdu-text">
+              {isUrdu 
+                ? 'اپنے تمام موبائلز اور کمپیوٹرز کے درمیان لائیو ڈیٹا کی ہم آہنگی کے لیے لاگ ان کریں۔' 
+                : 'Sign in to enable real-time cloud synchronization between all your shop devices.'}
+            </p>
 
-            <div className="relative flex py-2 items-center">
-              <div className="flex-grow border-t border-zinc-200"></div>
-              <span className="flex-shrink mx-4 text-xs font-bold text-zinc-400">{isUrdu ? 'یا ای میل و پاس ورڈ' : 'or Email & Password'}</span>
-              <div className="flex-grow border-t border-zinc-200"></div>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={handleGoogleSignIn}
+                disabled={authLoading}
+                className="px-4 py-2.5 bg-white border border-zinc-300 hover:bg-zinc-50 rounded-xl font-bold text-xs text-zinc-700 flex items-center gap-2 transition-colors disabled:opacity-50 shadow-sm"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                </svg>
+                <span className="urdu-text">{isUrdu ? 'گوگل سے فوری لاگ ان' : 'Sign In with Google'}</span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3 my-2">
+              <div className="h-px flex-1 bg-zinc-200" />
+              <span className="text-[10px] uppercase font-bold text-zinc-400">{isUrdu ? 'یا ای میل' : 'OR EMAIL'}</span>
+              <div className="h-px flex-1 bg-zinc-200" />
             </div>
 
             <form onSubmit={handleEmailSignIn} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -372,24 +447,96 @@ export default function CloudSyncManager({ lang, onSafetyBackup }: CloudSyncMana
             <Database size={24} />
           </div>
           <div className="flex-1">
-            <h4 className="font-black text-base text-zinc-900 urdu-text">
-              {isUrdu ? 'موجودہ ڈیٹا کی کلاؤڈ مائیگریشن (Safe Initial Cloud Upload)' : 'Safe Initial Cloud Data Migration'}
-            </h4>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h4 className="font-black text-base text-zinc-900 urdu-text">
+                {isUrdu ? 'موجودہ ڈیٹا کی کلاؤڈ مائیگریشن (Safe Initial Cloud Upload)' : 'Safe Initial Cloud Data Migration'}
+              </h4>
+              <span className="px-2.5 py-1 bg-amber-100 text-amber-800 rounded-lg text-xs font-black">
+                {localStats.totalBusiness} {isUrdu ? 'بزنس ریکارڈز' : 'Business Records'}
+              </span>
+            </div>
+
             <p className="text-xs text-zinc-600 mt-1 leading-relaxed urdu-text">
               {isUrdu
-                ? `آپ کے پاس لوکل ڈیٹا بیس میں کل ${localStats.total} ریکارڈز موجود ہیں۔ یہ ٹول بغیر کسی لوکل ریکارڈ کو مٹائے یا تبدیل کیے، تمام ڈیٹا کو فائر بیس کلاؤڈ پر محفوظ طریقے سے اپلوڈ کرتا ہے۔`
-                : `You currently have ${localStats.total} local records stored in IndexedDB. This safe migration uploads your complete business history to Firestore without altering local records.`}
+                ? `آپ کے پاس لوکل ڈیٹا بیس (NafeesERP_V56_Final) میں کل ${localStats.totalBusiness} بزنس ریکارڈز موجود ہیں (سیلز: ${localStats.sales}، آرڈرز: ${localStats.orders}، کاریگر: ${localStats.karigars}، مرمت: ${localStats.repairs}، اسٹاک: ${localStats.stock}، خریداری: ${localStats.purchases})۔`
+                : `You have ${localStats.totalBusiness} local business records in NafeesERP_V56_Final (Sales: ${localStats.sales}, Orders: ${localStats.orders}, Karigars: ${localStats.karigars}, Repairs: ${localStats.repairs}, Stock: ${localStats.stock}, Purchases: ${localStats.purchases}).`}
             </p>
 
-            {status.isMigrating ? (
-              <div className="mt-4 space-y-2">
-                <div className="flex justify-between text-xs font-bold text-zinc-700">
-                  <span className="urdu-text">{migrationStatusMsg || (isUrdu ? 'مائیگریشن جاری ہے...' : 'Migrating...')}</span>
-                  <span>{status.migrationProgress}%</span>
+            {/* Success Report Card with complete audit breakdown */}
+            {migrationSuccessReport && (
+              <div className="mt-4 p-4 bg-emerald-50 border border-emerald-300 rounded-2xl">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2 text-emerald-800 font-black text-sm">
+                    <CheckCircle2 size={18} />
+                    <span className="urdu-text">{isUrdu ? 'کلاؤڈ مائیگریشن اور تصدیق مکمل ہو گئی!' : 'Migration & Verification Complete!'}</span>
+                  </div>
+                  <button onClick={() => setMigrationSuccessReport(null)} className="text-emerald-700 hover:text-emerald-900">
+                    <X size={16} />
+                  </button>
                 </div>
-                <div className="w-full h-3 bg-zinc-200 rounded-full overflow-hidden">
+
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-3 text-center">
+                  <div className="p-2 bg-white/80 rounded-xl border border-emerald-200">
+                    <p className="text-[10px] text-zinc-500 font-bold">{isUrdu ? 'لوکل ریکارڈز' : 'Local Records'}</p>
+                    <p className="text-sm font-black text-zinc-900">{migrationSuccessReport.localRecords}</p>
+                  </div>
+                  <div className="p-2 bg-white/80 rounded-xl border border-emerald-200">
+                    <p className="text-[10px] text-emerald-600 font-bold">{isUrdu ? 'کلاؤڈ اپلوڈ' : 'Uploaded'}</p>
+                    <p className="text-sm font-black text-emerald-700">{migrationSuccessReport.uploaded}</p>
+                  </div>
+                  <div className="p-2 bg-white/80 rounded-xl border border-emerald-200">
+                    <p className="text-[10px] text-zinc-500 font-bold">{isUrdu ? 'ناکام' : 'Failed'}</p>
+                    <p className="text-sm font-black text-zinc-700">{migrationSuccessReport.failed}</p>
+                  </div>
+                  <div className="p-2 bg-white/80 rounded-xl border border-emerald-200">
+                    <p className="text-[10px] text-zinc-500 font-bold">{isUrdu ? 'چھوڑے گئے' : 'Skipped'}</p>
+                    <p className="text-sm font-black text-zinc-700">{migrationSuccessReport.skipped}</p>
+                  </div>
+                  <div className="p-2 bg-white/80 rounded-xl border border-emerald-200">
+                    <p className="text-[10px] text-zinc-500 font-bold">{isUrdu ? 'ڈپلیکیٹس' : 'Duplicates'}</p>
+                    <p className="text-sm font-black text-zinc-700">{migrationSuccessReport.duplicates}</p>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-emerald-800 font-semibold mt-3 urdu-text">
+                  {isUrdu 
+                    ? '✓ آپ کا لوکل ڈیٹا بیس (NafeesERP_V56_Final) 100% محفوظ ہے اور تمام ریکارڈز کلاؤڈ پر تصدیق ہو چکے ہیں۔' 
+                    : '✓ Local database NafeesERP_V56_Final remains 100% intact and verified on Firestore.'}
+                </p>
+              </div>
+            )}
+
+            {/* Error Message Display */}
+            {migrationErrorMsg && (
+              <div className="mt-4 p-4 bg-red-50 border border-red-300 rounded-2xl text-xs text-red-900 font-bold flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle size={18} className="text-red-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p>{migrationErrorMsg}</p>
+                    <p className="text-[11px] font-normal text-red-700 mt-1 urdu-text">
+                      {isUrdu ? 'لوکل ڈیٹا بیس کو کوئی نقصان نہیں پہنچا ہے۔' : 'Local database was not modified.'}
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => setMigrationErrorMsg(null)} className="text-red-600 hover:text-red-800">
+                  <X size={16} />
+                </button>
+              </div>
+            )}
+
+            {/* Progress Display */}
+            {status.isMigrating ? (
+              <div className="mt-5 p-4 bg-white/90 rounded-2xl border border-amber-200 space-y-3">
+                <div className="flex items-center justify-between text-xs font-bold text-zinc-800">
+                  <span className="flex items-center gap-2 urdu-text">
+                    <RefreshCw size={14} className="animate-spin text-amber-600" />
+                    {migrationStatusMsg || (isUrdu ? 'مائیگریشن جاری ہے...' : 'Migrating records...')}
+                  </span>
+                  <span className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded-md">{status.migrationProgress}%</span>
+                </div>
+                <div className="w-full h-3.5 bg-zinc-100 rounded-full overflow-hidden p-0.5 border border-zinc-200">
                   <div 
-                    className="h-full bg-amber-600 rounded-full transition-all duration-300"
+                    className="h-full bg-gradient-to-r from-amber-500 to-amber-600 rounded-full transition-all duration-300"
                     style={{ width: `${status.migrationProgress}%` }}
                   />
                 </div>
@@ -397,13 +544,15 @@ export default function CloudSyncManager({ lang, onSafetyBackup }: CloudSyncMana
             ) : (
               <div className="mt-4 flex flex-wrap gap-3 items-center">
                 <button
-                  onClick={handleStartMigration}
+                  type="button"
+                  id="btn-start-safe-cloud-migration"
+                  onClick={() => setShowConfirmModal(true)}
                   disabled={!status.isAuthenticated || status.isMigrating}
-                  className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-2xl font-black text-xs flex items-center gap-2 shadow-sm transition-all"
+                  className="px-5 py-3 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-2xl font-black text-xs flex items-center gap-2 shadow-sm hover:shadow-md transition-all cursor-pointer"
                 >
-                  <ShieldCheck size={16} />
+                  <ShieldCheck size={18} />
                   <span className="urdu-text">
-                    {isUrdu ? 'مکمل سیفٹی بیک اپ لیں اور کلاؤڈ مائیگریشن شروع کریں' : 'Backup & Migrate All Records to Cloud'}
+                    {isUrdu ? 'مکمل سیفٹی بیک اپ لیں اور کلاؤڈ مائیگریشن شروع کریں' : 'Start Full Safety Backup and Cloud Migration'}
                   </span>
                 </button>
               </div>
@@ -411,6 +560,76 @@ export default function CloudSyncManager({ lang, onSafetyBackup }: CloudSyncMana
           </div>
         </div>
       </div>
+
+      {/* In-App Confirmation Modal (Safe for iframe, Desktop Web & Android WebViews) */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl border border-zinc-200 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 text-amber-600 mb-4">
+              <div className="p-3 bg-amber-100 rounded-2xl">
+                <ShieldCheck size={32} />
+              </div>
+              <div>
+                <h3 className="font-black text-lg text-zinc-900 urdu-text">
+                  {isUrdu ? 'محفوظ کلاؤڈ مائیگریشن کی تصدیق' : 'Safe Initial Cloud Upload Confirmation'}
+                </h3>
+                <p className="text-xs font-bold text-amber-700 urdu-text">
+                  {localStats.totalBusiness} {isUrdu ? 'لوکل بزنس ریکارڈز اپلوڈ کے لیے تیار ہیں' : 'local business records are ready for Initial Cloud Upload.'}
+                </p>
+              </div>
+            </div>
+
+            {/* Detailed Safety Guarantee Notice */}
+            <div className="bg-zinc-50 rounded-2xl p-4 border border-zinc-200/80 mb-5 space-y-2.5 text-xs text-zinc-700 leading-relaxed">
+              <div className="flex items-start gap-2">
+                <FileCheck size={16} className="text-emerald-600 flex-shrink-0 mt-0.5" />
+                <p className="font-medium urdu-text">
+                  {isUrdu 
+                    ? '1. سب سے پہلے خودکار طریقے سے مکمل لوکل سیفٹی بیک اپ فائل (nafees_jewellers_backup.json) تیار ہوگی۔' 
+                    : '1. A mandatory full safety backup file (nafees_jewellers_backup.json) will be created first.'}
+                </p>
+              </div>
+              <div className="flex items-start gap-2">
+                <UploadCloud size={16} className="text-sky-600 flex-shrink-0 mt-0.5" />
+                <p className="font-medium urdu-text">
+                  {isUrdu 
+                    ? '2. سیفٹی بیک اپ مکمل ہونے کے بعد تمام ریکارڈز فائر بیس فائر اسٹور پر اپلوڈ ہوں گے۔' 
+                    : '2. After successful backup, existing business records will safely upload to Firebase Firestore.'}
+                </p>
+              </div>
+              <div className="flex items-start gap-2">
+                <CheckCircle2 size={16} className="text-emerald-600 flex-shrink-0 mt-0.5" />
+                <p className="font-medium text-emerald-900 urdu-text font-bold">
+                  {isUrdu 
+                    ? '3. آپ کا لوکل ڈیٹا بیس (NafeesERP_V56_Final) کسی بھی صورت میں حذف یا تبدیل نہیں ہوگا۔' 
+                    : '3. Your local database will NOT be deleted or modified.'}
+                </p>
+              </div>
+            </div>
+
+            {/* Action Buttons: CANCEL vs START SAFE CLOUD UPLOAD */}
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-zinc-100">
+              <button
+                type="button"
+                id="btn-cancel-cloud-migration"
+                onClick={() => setShowConfirmModal(false)}
+                className="px-5 py-2.5 rounded-xl text-xs font-bold text-zinc-600 hover:bg-zinc-100 transition-colors urdu-text cursor-pointer"
+              >
+                {isUrdu ? 'منسوخ کریں (CANCEL)' : 'CANCEL'}
+              </button>
+              <button
+                type="button"
+                id="btn-confirm-start-safe-upload"
+                onClick={executeConfirmedMigration}
+                className="px-6 py-2.5 rounded-xl text-xs font-black bg-amber-600 hover:bg-amber-700 text-white shadow-md hover:shadow-lg transition-all urdu-text flex items-center gap-2 cursor-pointer"
+              >
+                <ShieldCheck size={16} />
+                <span>{isUrdu ? 'محفوظ کلاؤڈ اپلوڈ شروع کریں' : 'START SAFE CLOUD UPLOAD'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

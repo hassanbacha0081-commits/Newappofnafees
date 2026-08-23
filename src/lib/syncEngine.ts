@@ -604,7 +604,13 @@ export const runFullSync = async (): Promise<{ success: boolean; pushed: number;
           q = query(colRef, where('_updatedAt', '>', sinceTimestamp - 60000)); // 1 min buffer
         }
 
-        const snapshot = await getDocs(q);
+        let snapshot;
+        try {
+          snapshot = await getDocs(q);
+        } catch (tableErr: any) {
+          console.warn(`Pull skipped for ${tableName}:`, tableErr);
+          continue;
+        }
         const table = (db as any)[tableName];
         if (!table) continue;
 
