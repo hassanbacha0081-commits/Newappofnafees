@@ -129,6 +129,7 @@ export const runWithRemoteSync = async <T>(operation: () => Promise<T>): Promise
 export interface SyncEngineStatus {
   isOnline: boolean;
   isAuthenticated: boolean;
+  isConnected: boolean;
   currentUser: User | null;
   shopId: string;
   isSyncing: boolean;
@@ -144,6 +145,7 @@ export interface SyncEngineStatus {
 let syncStatus: SyncEngineStatus = {
   isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
   isAuthenticated: false,
+  isConnected: true,
   currentUser: null,
   shopId: DEFAULT_SHOP_ID,
   isSyncing: false,
@@ -366,8 +368,8 @@ export const cleanupOrphanedMetadataQueue = async () => {
 export const migrateLocalIndexedDBToFirestore = async (
   onProgress?: (progress: number, message: string) => void
 ): Promise<{ success: boolean; migratedCount: number; errors: string[] }> => {
-  if (!syncStatus.isAuthenticated) {
-    return { success: false, migratedCount: 0, errors: ['Firebase Auth is required to migrate data. Please sign in.'] };
+  if (!syncStatus.isOnline) {
+    return { success: false, migratedCount: 0, errors: ['انٹرنیٹ کنکشن درکار ہے (Internet connection required).'] };
   }
 
   syncStatus.isMigrating = true;
@@ -499,10 +501,6 @@ export const runFullSync = async (): Promise<{ success: boolean; pushed: number;
 
   if (!syncStatus.isOnline) {
     return { success: false, pushed: 0, pulled: 0, error: 'Offline. Data is saved locally.' };
-  }
-
-  if (!syncStatus.isAuthenticated) {
-    return { success: false, pushed: 0, pulled: 0, error: 'User is not authenticated with Firebase.' };
   }
 
   syncStatus.isSyncing = true;
@@ -728,7 +726,7 @@ let activeUnsubscribes: Unsubscribe[] = [];
 
 export const startRealtimeListeners = () => {
   stopRealtimeListeners();
-  if (!syncStatus.isAuthenticated) return;
+  if (!syncStatus.isOnline) return;
 
   const shopId = syncStatus.shopId || DEFAULT_SHOP_ID;
 
@@ -786,14 +784,14 @@ export const initSyncEngine = async () => {
     window.addEventListener('online', () => {
       syncStatus.isOnline = true;
       notifyStatus();
-      if (syncStatus.isAuthenticated) {
-        runFullSync().catch(console.error);
-      }
+      startRealtimeListeners();
+      runFullSync().catch(console.error);
     });
 
     window.addEventListener('offline', () => {
       syncStatus.isOnline = false;
       notifyStatus();
+      stopRealtimeListeners();
     });
   }
 
@@ -803,21 +801,23 @@ export const initSyncEngine = async () => {
   // Clean any obsolete metadata-only items trapped in syncQueue from earlier sessions
   await cleanupOrphanedMetadataQueue();
 
-  // Monitor Firebase Auth State
+  // Start Realtime Firestore listeners immediately
+  startRealtimeListeners();
+
+  // Monitor Firebase Auth State if available
   onAuthStateChanged(auth, async (user) => {
     syncStatus.currentUser = user;
     syncStatus.isAuthenticated = !!user;
     notifyStatus();
 
     if (user) {
-      startRealtimeListeners();
       await updatePendingCount();
-      // Trigger initial sync on login
       runFullSync().catch(console.error);
-    } else {
-      stopRealtimeListeners();
     }
   });
+
+  // Trigger initial full sync on app startup
+  runFullSync().catch(console.error);
 
   // Hydrate last sync timestamp from local settings
   try {

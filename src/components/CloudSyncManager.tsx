@@ -114,16 +114,24 @@ export default function CloudSyncManager({ lang, onSafetyBackup }: CloudSyncMana
 
   const formatAuthError = (err: any): string => {
     if (!err) return '';
+    if (err.code === 'auth/operation-not-allowed' || err.message?.includes('operation-not-allowed')) {
+      return isUrdu
+        ? 'فائر بیس کنسول میں Email/Password سائن ان پرووائیڈر ڈس ایبل ہے۔ براہ کرم فائر بیس کنسول -> Authentication -> Sign-in method میں جا کر "Email/Password" کو Enable کریں۔'
+        : 'Firebase Error: Email/Password sign-in provider is disabled. Please enable "Email/Password" in Firebase Console → Authentication → Sign-in method.';
+    }
     if (err.code === 'auth/unauthorized-domain' || err.message?.includes('unauthorized-domain')) {
       return isUrdu
-        ? 'غلطی: فائر بیس کنسول میں "localhost" یا ڈومین کی اجازت درکار ہے۔ براہ کرم فائر بیس کنسول -> Authentication -> Settings -> Authorized Domains میں "localhost" شامل کریں۔'
-        : 'Firebase Error: "localhost" is not added to Authorized Domains in Firebase Console. Please add "localhost" under Firebase Console → Authentication → Settings → Authorized domains.';
+        ? 'غلطی: فائر بیس کنسول میں ڈومین کی اجازت درکار ہے۔ براہ کرم فائر بیس کنسول -> Authentication -> Settings -> Authorized Domains چیک کریں۔'
+        : 'Firebase Error: Unauthorized domain. Please check Authorized Domains in Firebase Console → Authentication → Settings.';
     }
     if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
       return isUrdu ? 'غلط ای میل یا پاس ورڈ درج کیا گیا ہے۔' : 'Invalid email or password.';
     }
     if (err.code === 'auth/network-request-failed') {
       return isUrdu ? 'انٹرنیٹ کنکشن کا مسئلہ ہے۔ برائے مہربانی انٹرنیٹ چیک کریں۔' : 'Network error. Please check your internet connection.';
+    }
+    if (err.code === 'auth/popup-closed-by-user') {
+      return isUrdu ? 'گوگل لاگ ان ونڈو بند کر دی گئی ہے۔' : 'Google sign-in popup was closed.';
     }
     return err.message || 'Authentication error';
   };
@@ -255,7 +263,7 @@ export default function CloudSyncManager({ lang, onSafetyBackup }: CloudSyncMana
       <div className="bg-white rounded-3xl p-6 border border-zinc-200 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-zinc-100">
           <div className="flex items-center gap-3">
-            <div className={`p-3 rounded-2xl ${status.isAuthenticated ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+            <div className={`p-3 rounded-2xl ${status.isOnline ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
               <Cloud size={28} />
             </div>
             <div>
@@ -264,11 +272,11 @@ export default function CloudSyncManager({ lang, onSafetyBackup }: CloudSyncMana
                   {isUrdu ? 'فائر بیس کلاؤڈ سنکرونائزیشن' : 'Firebase Cloud Synchronization'}
                 </h3>
                 <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase ${
-                  status.isAuthenticated 
+                  status.isOnline 
                     ? 'bg-emerald-100 text-emerald-700' 
                     : 'bg-zinc-100 text-zinc-600'
                 }`}>
-                  {status.isAuthenticated ? (isUrdu ? 'منسلک (Connected)' : 'Connected') : (isUrdu ? 'غیر منسلک (Offline)' : 'Not Signed In')}
+                  {status.isOnline ? (isUrdu ? 'کلاؤڈ فعال (Live Active)' : 'Live Active') : (isUrdu ? 'غیر منسلک (Offline)' : 'Offline')}
                 </span>
               </div>
               <p className="text-xs text-zinc-500 mt-0.5 urdu-text">
@@ -282,7 +290,7 @@ export default function CloudSyncManager({ lang, onSafetyBackup }: CloudSyncMana
           <div className="flex items-center gap-2">
             <button
               onClick={handleTriggerSync}
-              disabled={status.isSyncing || !status.isAuthenticated}
+              disabled={status.isSyncing || !status.isOnline}
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl font-bold text-xs flex items-center gap-2 shadow-sm transition-all"
             >
               <RefreshCw size={14} className={status.isSyncing ? 'animate-spin' : ''} />
@@ -393,10 +401,27 @@ export default function CloudSyncManager({ lang, onSafetyBackup }: CloudSyncMana
           </div>
         ) : (
           <div className="space-y-4">
+            <div className="p-3 bg-sky-50 border border-sky-200 rounded-2xl flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ShieldCheck size={18} className="text-sky-600 flex-shrink-0" />
+                <div>
+                  <p className="text-xs font-black text-sky-900 urdu-text">
+                    {isUrdu ? 'شاپ کلاؤڈ چینل لائیو اور منسلک ہے (nafees_jewellers_main)' : 'Shop Cloud Channel is Live (nafees_jewellers_main)'}
+                  </p>
+                  <p className="text-[10px] text-sky-700 urdu-text">
+                    {isUrdu ? 'آپ کا ڈیٹا تمام فونز اور کمپیوٹرز پر خودکار سنک ہو رہا ہے۔' : 'Your data automatically syncs across all phones and PCs.'}
+                  </p>
+                </div>
+              </div>
+              <span className="px-2 py-0.5 bg-sky-200/70 text-sky-900 rounded-md text-[10px] font-black uppercase tracking-wider">
+                {isUrdu ? 'ایکٹیو' : 'Active'}
+              </span>
+            </div>
+
             <p className="text-xs text-zinc-500 urdu-text">
               {isUrdu 
-                ? 'اپنے تمام موبائلز اور کمپیوٹرز کے درمیان لائیو ڈیٹا کی ہم آہنگی کے لیے لاگ ان کریں۔' 
-                : 'Sign in to enable real-time cloud synchronization between all your shop devices.'}
+                ? 'اگر آپ چاہیں تو اپنے ذاتی گوگل اکاؤنٹ سے بھی لاگ ان کر سکتے ہیں:' 
+                : 'You can also optionally sign in with your Google account:'}
             </p>
 
             <div className="flex flex-wrap gap-3">
@@ -563,7 +588,7 @@ export default function CloudSyncManager({ lang, onSafetyBackup }: CloudSyncMana
                   type="button"
                   id="btn-start-safe-cloud-migration"
                   onClick={() => setShowConfirmModal(true)}
-                  disabled={!status.isAuthenticated || status.isMigrating}
+                  disabled={!status.isOnline || status.isMigrating}
                   className="px-5 py-3 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-2xl font-black text-xs flex items-center gap-2 shadow-sm hover:shadow-md transition-all cursor-pointer"
                 >
                   <ShieldCheck size={18} />
