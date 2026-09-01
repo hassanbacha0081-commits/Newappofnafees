@@ -8,9 +8,10 @@ interface LockScreenProps {
   correctPin: string;
   onUnlock: () => void;
   shopName: string;
+  shopLogo?: string;
 }
 
-export default function LockScreen({ lang, correctPin, onUnlock, shopName }: LockScreenProps) {
+export default function LockScreen({ lang, correctPin, onUnlock, shopName, shopLogo }: LockScreenProps) {
   const [pinInput, setPinInput] = useState('');
   const [error, setError] = useState(false);
   const t = translations[lang];
@@ -43,7 +44,7 @@ export default function LockScreen({ lang, correctPin, onUnlock, shopName }: Loc
         
         <div className="w-28 h-28 bg-white border border-sky-50 rounded-2xl flex items-center justify-center mb-8 shadow-xl relative group">
           <div className="absolute inset-0 bg-gold blur-lg opacity-20 transition-opacity"></div>
-          <img src={APP_CONFIG.appIcon} alt="Logo" className="w-20 h-20 object-contain relative z-10" referrerPolicy="no-referrer" />
+          <img src={(shopLogo || APP_CONFIG.appIcon)} alt="Logo" className="w-20 h-20 object-contain relative z-10" referrerPolicy="no-referrer" />
         </div>
         
         <h1 className="text-3xl font-black urdu-text text-sky-900 mb-2 text-center tracking-tight">{shopName}</h1>

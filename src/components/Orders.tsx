@@ -33,7 +33,7 @@ export default function Orders({ lang }: OrdersProps) {
   const [isContactPickerOpen, setIsContactPickerOpen] = useState(false);
   const [baqayaFilter, setBaqayaFilter] = useState<'all' | 'pending' | 'cleared'>('all');
   
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<any>({
     name: '',
     phone: '',
     date: new Date().toISOString().split('T')[0],
@@ -242,7 +242,7 @@ export default function Orders({ lang }: OrdersProps) {
   }, [orders]);
 
   const updateRem = () => {
-    if (editId) { return formData.total - formData.payments.reduce((s, p) => s + p.amt, 0) - formData.discount; } return formData.total - formData.recAmt - formData.discount;
+    if (editId) { return Number(formData.total) - formData.payments.reduce((s, p) => s + p.amt, 0) - formData.discount; } return Number(formData.total) - Number(formData.recAmt) - Number(formData.discount);
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -451,7 +451,7 @@ export default function Orders({ lang }: OrdersProps) {
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-zinc-600 urdu-text">نئی وصول شدہ رقم:</label>
                   <input 
-                    type="number" 
+                    type="number" step="any" 
                     autoFocus
                     value={qistAmount}
                     onChange={e => setQistAmount(e.target.value)}
@@ -695,8 +695,7 @@ export default function Orders({ lang }: OrdersProps) {
             <div className="space-y-1">
               <label className="text-xs text-zinc-500 urdu-text">{lang === 'ur' ? 'کسٹمر گولڈ (g):' : 'Customer Gold (g):'}</label>
               <input 
-                type="number" 
-                step="any"
+                type="number" step="any"
                 value={formData.oldWt || ''}
                 onChange={e => setFormData({ ...formData, oldWt: e.target.value })}
                 className="w-full p-3 bg-white border border-sky-200 rounded-lg outline-none focus:border-gold text-black"
@@ -706,8 +705,7 @@ export default function Orders({ lang }: OrdersProps) {
             <div className="space-y-1">
               <label className="text-xs text-zinc-500 urdu-text">{lang === 'ur' ? 'وزن (g):' : 'Weight (g):'}</label>
               <input 
-                type="number" 
-                step="any"
+                type="number" step="any"
                 value={formData.readyWt || ''}
                 onChange={e => {
                   const val = e.target.value;
@@ -727,8 +725,7 @@ export default function Orders({ lang }: OrdersProps) {
             <div className="space-y-1">
               <label className="text-xs text-zinc-500 urdu-text">{lang === 'ur' ? 'پالش:' : 'Polish:'}</label>
               <input 
-                type="number" 
-                step="any"
+                type="number" step="any"
                 value={formData.makingCharges || ''}
                 onChange={e => {
                   const val = e.target.value;
@@ -748,8 +745,7 @@ export default function Orders({ lang }: OrdersProps) {
             <div className="space-y-1">
               <label className="text-xs text-zinc-500 urdu-text">{lang === 'ur' ? 'ٹوٹل وزن (g):' : 'Total Wazan (g):'}</label>
               <input 
-                type="number" 
-                step="any"
+                type="number" step="any"
                 value={formData.totalWt || ''}
                 onChange={e => setFormData({ ...formData, totalWt: e.target.value })}
                 className="w-full p-3 bg-white border border-sky-200 rounded-lg outline-none focus:border-gold text-black"
@@ -759,8 +755,7 @@ export default function Orders({ lang }: OrdersProps) {
             <div className="space-y-1">
               <label className="text-xs text-zinc-500 urdu-text">{lang === 'ur' ? 'اضافی وزن (Izafi Weight):' : 'Izafi Weight:'}</label>
               <input 
-                type="number" 
-                step="any"
+                type="number" step="any"
                 readOnly
                 value={
                   formData.oldWt !== '' && formData.totalWt !== ''
@@ -858,11 +853,11 @@ export default function Orders({ lang }: OrdersProps) {
             <div className="space-y-1">
               <label className="text-xs text-zinc-500 urdu-text">{lang === 'ur' ? 'قیمت (Price):' : 'Price:'}</label>
               <input 
-                type="number" 
+                type="number" step="any" 
                 value={formData.price || ''}
                 onChange={e => {
-                  const p = Number(e.target.value);
-                  setFormData({ ...formData, price: p, total: p + (formData.mazdori || 0) });
+                  const p = (e.target.value === '' ? '' : e.target.value);
+                  setFormData({ ...formData, price: p, total: Number(p) + Number(formData.mazdori || 0) });
                 }}
                 className="w-full p-3 bg-white border border-sky-200 rounded-lg outline-none focus:border-gold text-black"
                 placeholder="e.g. 45000"
@@ -871,11 +866,11 @@ export default function Orders({ lang }: OrdersProps) {
             <div className="space-y-1">
               <label className="text-xs text-zinc-500 urdu-text">{lang === 'ur' ? 'مزدوری (Mazdori):' : 'Mazdori:'}</label>
               <input 
-                type="number" 
+                type="number" step="any" 
                 value={formData.mazdori || ''}
                 onChange={e => {
-                  const m = Number(e.target.value);
-                  setFormData({ ...formData, mazdori: m, total: (formData.price || 0) + m });
+                  const m = (e.target.value === '' ? '' : e.target.value);
+                  setFormData({ ...formData, mazdori: m, total: Number(formData.price || 0) + Number(m) });
                 }}
                 className="w-full p-3 bg-white border border-sky-200 rounded-lg outline-none focus:border-gold text-black"
                 placeholder="e.g. 5000"
@@ -884,9 +879,9 @@ export default function Orders({ lang }: OrdersProps) {
             <div className="space-y-1">
               <label className="text-xs text-zinc-500 urdu-text">کل رقم (Total Price):</label>
               <input 
-                type="number" 
+                type="number" step="any" 
                 value={formData.total || ''}
-                onChange={e => setFormData({ ...formData, total: Number(e.target.value) })}
+                onChange={e => setFormData({ ...formData, total: (e.target.value === '' ? '' : e.target.value) })}
                 className="w-full p-3 bg-white border border-sky-200 rounded-lg outline-none focus:border-gold text-black"
                 placeholder="e.g. 50,000"
               />
@@ -895,9 +890,9 @@ export default function Orders({ lang }: OrdersProps) {
               <div className="space-y-1">
                 <label className="text-xs text-zinc-500 urdu-text">وصول شدہ رقم (Advance):</label>
                 <input 
-                  type="number" 
+                  type="number" step="any" 
                   value={formData.recAmt || ''}
-                  onChange={e => setFormData({ ...formData, recAmt: Number(e.target.value) })}
+                  onChange={e => setFormData({ ...formData, recAmt: (e.target.value === '' ? '' : e.target.value) })}
                   className="w-full p-3 bg-white border border-sky-200 rounded-lg outline-none focus:border-gold text-black"
                   placeholder="e.g. 10,000"
                 />
@@ -911,11 +906,11 @@ export default function Orders({ lang }: OrdersProps) {
                       <div key={idx} className="flex gap-2 items-center">
                         <span className="text-xs text-zinc-400 w-20">{p.date}</span>
                         <input 
-                          type="number" 
+                          type="number" step="any" 
                           value={p.amt || ''}
                           onChange={e => {
                             const newPayments = [...formData.payments];
-                            newPayments[idx].amt = Number(e.target.value);
+                            newPayments[idx].amt = (e.target.value === '' ? '' : e.target.value);
                             setFormData({ ...formData, payments: newPayments });
                           }}
                           className="flex-1 p-2 bg-white border border-sky-200 rounded-lg outline-none focus:border-gold text-black text-sm"
@@ -940,9 +935,9 @@ export default function Orders({ lang }: OrdersProps) {
             <div className="space-y-1">
               <label className="text-xs text-zinc-500 urdu-text">رعایت / چھوٹ (Discount):</label>
               <input 
-                type="number" 
+                type="number" step="any" 
                 value={formData.discount || ''}
-                onChange={e => setFormData({ ...formData, discount: Number(e.target.value) })}
+                onChange={e => setFormData({ ...formData, discount: (e.target.value === '' ? '' : e.target.value) })}
                 className="w-full p-3 bg-white border border-sky-200 rounded-lg outline-none focus:border-gold text-black"
                 placeholder="e.g. 500"
               />

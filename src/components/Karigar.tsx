@@ -31,7 +31,7 @@ export default function Karigar({ lang }: KarigarProps) {
   const [lightboxData, setLightboxData] = useState<{ src: string; title?: string; phone?: string; caption?: string } | null>(null);
   const [isContactPickerOpen, setIsContactPickerOpen] = useState(false);
   
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<any>({
     name: '',
     phone: '',
     task: '',
@@ -452,24 +452,24 @@ export default function Karigar({ lang }: KarigarProps) {
             lang={lang}
           />
           <input 
-            type="number" 
+            type="number" step="any" 
             placeholder={t.karigarLabels.givenTotal}
             value={formData.given || ''}
-            onChange={e => setFormData({ ...formData, given: Number(e.target.value) })}
+            onChange={e => setFormData({ ...formData, given: (e.target.value === '' ? '' : e.target.value) })}
             className="w-full p-4 bg-white border border-sky-200 rounded-xl outline-none focus:border-gold text-black text-center"
           />
           <input 
-            type="number" 
+            type="number" step="any" 
             placeholder={t.karigarLabels.returnRec}
             value={formData.rec || ''}
-            onChange={e => setFormData({ ...formData, rec: Number(e.target.value) })}
+            onChange={e => setFormData({ ...formData, rec: (e.target.value === '' ? '' : e.target.value) })}
             className="w-full p-4 bg-white border border-sky-200 rounded-xl outline-none focus:border-gold text-black text-center"
           />
           <input 
-            type="number" 
+            type="number" step="any" 
             placeholder={t.karigarLabels.kaatInput}
             value={formData.kaatIn || ''}
-            onChange={e => setFormData({ ...formData, kaatIn: Number(e.target.value) })}
+            onChange={e => setFormData({ ...formData, kaatIn: (e.target.value === '' ? '' : e.target.value) })}
             className="w-full p-4 bg-white border border-sky-200 rounded-xl outline-none focus:border-gold text-black text-center"
           />
           <div className="w-full p-4 bg-zinc-50 border border-transparent text-gold-dark font-bold rounded-xl flex justify-center items-center gap-2">
@@ -830,10 +830,10 @@ export default function Karigar({ lang }: KarigarProps) {
               <div>
                 <label className="text-xs font-bold text-zinc-500 urdu-text block mb-1 text-right pr-1">وصول شدہ وزن - گرام (Gold Weight)</label>
                 <input 
-                  type="number" 
+                  type="number" step="any" 
                   placeholder="0.00g"
                   value={settlementData.amount || ''}
-                  onChange={e => setSettlementData({ ...settlementData, amount: Number(e.target.value) })}
+                  onChange={e => setSettlementData({ ...settlementData, amount: (e.target.value === '' ? '' : e.target.value) })}
                   className="w-full p-4 border border-sky-200 rounded-xl outline-none focus:border-gold text-black text-center font-mono font-bold text-emerald-600 text-lg"
                 />
               </div>

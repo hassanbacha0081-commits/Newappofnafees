@@ -252,11 +252,11 @@ export default function Expenses({ lang }: ExpensesProps) {
                 <div className="space-y-2">
                   <label className="text-xs font-black text-zinc-500 uppercase tracking-widest urdu-text">{isUrdu ? 'رقم' : 'Amount'}</label>
                   <input 
-                    type="number"
+                    type="number" step="any"
                     required
                     placeholder="0.00"
                     value={newExpense.amount || ''}
-                    onChange={(e) => setNewExpense({...newExpense, amount: Number(e.target.value)})}
+                    onChange={(e) => setNewExpense({...newExpense, amount: (e.target.value === '' ? '' : e.target.value)})}
                     className="w-full p-4 bg-sky-50 border border-sky-100 rounded-2xl text-2xl font-black outline-none focus:ring-2 focus:ring-gold text-sky-900"
                   />
                 </div>

@@ -37,7 +37,7 @@ export default function Khaata({ lang }: KhaataProps) {
   const [isContactPickerOpen, setIsContactPickerOpen] = useState(false);
   
   // Account Form
-  const [accountForm, setAccountForm] = useState({
+  const [accountForm, setAccountForm] = useState<any>({
     name: '',
     phone: '',
     notes: ''
@@ -49,7 +49,7 @@ export default function Khaata({ lang }: KhaataProps) {
   const [currentImg, setCurrentImg] = useState<string | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
-  const [entryForm, setEntryForm] = useState({
+  const [entryForm, setEntryForm] = useState<any>({
     date: formatDate(new Date(), 'ur-PK'),
     details: '',
     type: 'give' as 'give' | 'receive', // give = دیا / Out, receive = وصول / In
@@ -827,11 +827,10 @@ export default function Khaata({ lang }: KhaataProps) {
                 <div>
                   <label className="text-xs font-bold text-zinc-500 urdu-text block mb-1 text-right pr-1">مکس وزن (Mix Weight)</label>
                   <input
-                    type="number"
-                    step="any"
+                    type="number" step="any"
                     placeholder="0.00g"
                     value={entryForm.mixWeight || ''}
-                    onChange={e => handleFormValChange('mixWeight', Number(e.target.value))}
+                    onChange={e => handleFormValChange('mixWeight', (e.target.value === '' ? '' : e.target.value))}
                     className="w-full p-4 border border-sky-200 rounded-xl outline-none focus:border-gold text-black text-center font-mono font-bold"
                   />
                 </div>
@@ -839,11 +838,10 @@ export default function Khaata({ lang }: KhaataProps) {
                 <div>
                   <label className="text-xs font-bold text-zinc-500 urdu-text block mb-1 text-right pr-1">پکائی (Pakaye / Wastage)</label>
                   <input
-                    type="number"
-                    step="any"
+                    type="number" step="any"
                     placeholder="0.00 R"
                     value={entryForm.pakaye || ''}
-                    onChange={e => handleFormValChange('pakaye', Number(e.target.value))}
+                    onChange={e => handleFormValChange('pakaye', (e.target.value === '' ? '' : e.target.value))}
                     className="w-full p-4 border border-sky-200 rounded-xl outline-none focus:border-gold text-black text-center font-mono font-bold"
                   />
                 </div>
@@ -851,11 +849,10 @@ export default function Khaata({ lang }: KhaataProps) {
                 <div>
                   <label className="text-xs font-bold text-zinc-500 urdu-text block mb-1 text-right pr-1">کاٹ رتی (Kaat in Rati)</label>
                   <input
-                    type="number"
-                    step="any"
+                    type="number" step="any"
                     placeholder="0 rati"
                     value={entryForm.kaatRati || ''}
-                    onChange={e => handleFormValChange('kaatRati', Number(e.target.value))}
+                    onChange={e => handleFormValChange('kaatRati', (e.target.value === '' ? '' : e.target.value))}
                     className="w-full p-4 border border-sky-200 rounded-xl outline-none focus:border-gold text-black text-center font-mono font-bold"
                   />
                 </div>
@@ -863,11 +860,10 @@ export default function Khaata({ lang }: KhaataProps) {
                 <div>
                   <label className="text-xs font-bold text-zinc-500 urdu-text block mb-1 text-right pr-1 text-sky-900">آئٹم پاسا (Item Pasa)</label>
                   <input
-                    type="number"
-                    step="any"
+                    type="number" step="any"
                     placeholder="0.00g"
                     value={entryForm.pureWeight || ''}
-                    onChange={e => handleFormValChange('pureWeight', Number(e.target.value))}
+                    onChange={e => handleFormValChange('pureWeight', (e.target.value === '' ? '' : e.target.value))}
                     className="w-full p-4 border border-sky-300 rounded-xl outline-none focus:border-gold text-sky-950 text-center font-mono font-black bg-sky-50/30"
                   />
                 </div>
@@ -875,11 +871,10 @@ export default function Khaata({ lang }: KhaataProps) {
                 <div>
                   <label className="text-xs font-bold text-zinc-500 urdu-text block mb-1 text-right pr-1">پاسا دیا / ملا (Pasa Gold)</label>
                   <input
-                    type="number"
-                    step="any"
+                    type="number" step="any"
                     placeholder="0.00g"
                     value={entryForm.pasaDia || ''}
-                    onChange={e => handleFormValChange('pasaDia', Number(e.target.value))}
+                    onChange={e => handleFormValChange('pasaDia', (e.target.value === '' ? '' : e.target.value))}
                     className="w-full p-4 border border-sky-200 rounded-xl outline-none focus:border-gold text-black text-center font-mono font-bold text-gold-dark"
                   />
                 </div>

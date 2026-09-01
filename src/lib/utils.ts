@@ -210,8 +210,11 @@ export async function shareImageToWhatsApp({
         : 'تصویر ڈاؤن لوڈ ہو گئی ہے! واٹس ایپ چیٹ میں اٹیچ کریں۔'
     };
   } catch (err: any) {
-    console.error('Failed to share image to WhatsApp:', err);
-    return { success: false, message: err?.message || 'تصویر شیئر نہیں ہو سکی' };
+    const isCancel = err?.name === 'AbortError' || err?.message?.toLowerCase().includes('cancel') || err?.message?.toLowerCase().includes('abort');
+    if (!isCancel) {
+      console.error('Failed to share image to WhatsApp:', err);
+    }
+    return { success: false, message: isCancel ? '' : (err?.message || 'تصویر شیئر نہیں ہو سکی') };
   }
 }
 

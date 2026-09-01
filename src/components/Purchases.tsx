@@ -275,10 +275,9 @@ export default function Purchases({ lang }: PurchasesProps) {
                   <label className={`text-sm font-bold text-zinc-700 ml-1 ${isUrdu ? 'urdu-text' : ''}`}>{t.goldWeight}</label>
                   <div className="relative">
                     <input 
-                      type="number" 
+                      type="number" step="any" 
                       required
                       min="0.001"
-                      step="0.001"
                       value={weight}
                       onChange={e => setWeight(e.target.value)}
                       dir="ltr"
@@ -291,7 +290,7 @@ export default function Purchases({ lang }: PurchasesProps) {
                   <label className={`text-sm font-bold text-zinc-700 ml-1 ${isUrdu ? 'urdu-text' : ''}`}>{t.buyingRate}</label>
                   <div className="relative">
                     <input 
-                      type="number" 
+                      type="number" step="any" 
                       required
                       min="1"
                       value={rate}

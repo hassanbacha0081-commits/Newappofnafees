@@ -30,7 +30,7 @@ export default function Repairs({ lang }: RepairsProps) {
   const [currentImg, setCurrentImg] = useState<string | null>(null);
   const [lightboxData, setLightboxData] = useState<{ src: string; title?: string; phone?: string; caption?: string } | null>(null);
   const [isContactPickerOpen, setIsContactPickerOpen] = useState(false);
-  const [formData, setFormData] = useState<Partial<Repair>>({
+  const [formData, setFormData] = useState<any>({
     customerName: '',
     customerPhone: '',
     item: '',
@@ -400,9 +400,9 @@ export default function Repairs({ lang }: RepairsProps) {
               <div>
                 <label className="block text-sm font-medium text-zinc-500 mb-1 urdu-text">{t.charges}</label>
                 <input 
-                  type="number" 
+                  type="number" step="any" 
                   value={formData.charges || ''}
-                  onChange={e => setFormData({...formData, charges: Number(e.target.value)})}
+                  onChange={e => setFormData({...formData, charges: (e.target.value === '' ? '' : e.target.value)})}
                   className="w-full bg-white border border-sky-200 rounded-lg p-3 focus:border-gold outline-none text-black"
                 />
               </div>

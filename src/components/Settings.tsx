@@ -289,7 +289,8 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
     printShiftX: 0,
     printShiftY: 0,
     autoBackupFrequency: 'none',
-    appPin: ''
+    appPin: '',
+    shopLogo: ''
   });
 
   useEffect(() => {
@@ -299,17 +300,23 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
       const shiftYData = await db.settings.get('printShiftY');
       const backupFreqData = await db.settings.get('autoBackupFrequency');
       const appPinData = await db.settings.get('appPin');
+      const sName = await db.settings.get('shopName');
+      const sAddr = await db.settings.get('shopAddress');
+      const sPhone1 = await db.settings.get('shopPhone');
+      const sPhone2 = await db.settings.get('shopPhone2');
+      const sLogo = await db.settings.get('shopLogo');
       
       setCurrentSettings({
         goldRate: rateData?.value || 0,
-        shopName: lang === 'ur' ? APP_CONFIG.shopNameUrdu : APP_CONFIG.shopNameEnglish,
-        shopAddress: lang === 'ur' ? APP_CONFIG.shopAddressUrdu : APP_CONFIG.shopAddressEnglish,
-        shopPhone: APP_CONFIG.phone1,
-        shopPhone2: APP_CONFIG.phone2,
+        shopName: sName?.value || (lang === 'ur' ? APP_CONFIG.shopNameUrdu : APP_CONFIG.shopNameEnglish),
+        shopAddress: sAddr?.value || (lang === 'ur' ? APP_CONFIG.shopAddressUrdu : APP_CONFIG.shopAddressEnglish),
+        shopPhone: sPhone1?.value || APP_CONFIG.phone1,
+        shopPhone2: sPhone2?.value || APP_CONFIG.phone2,
         printShiftX: shiftXData?.value || 0,
         printShiftY: shiftYData?.value || 0,
         autoBackupFrequency: backupFreqData?.value || 'none',
-        appPin: appPinData?.value || ''
+        appPin: appPinData?.value || '',
+        shopLogo: sLogo?.value || ''
       });
     };
     fetchSettings();
@@ -753,27 +760,88 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
           <div className="bg-white p-6 rounded-xl shadow-sm border border-sky-200 space-y-6">
             <h3 className="text-lg font-bold text-gold-dark border-b border-sky-100 pb-2 urdu-text">{lang === 'ur' ? 'دکان کی تفصیلات' : 'Shop Details'}</h3>
 
-            {/* Read-only fixed Shop Information badge */}
-            <div className="bg-gradient-to-br from-amber-50 to-sky-50 p-4 rounded-xl border border-amber-200/80 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wide urdu-text">
-                  {lang === 'ur' ? 'دکان کی معلومات (مقررہ)' : 'Shop Information (Fixed)'}
-                </span>
-                <span className="text-[10px] font-bold px-2.5 py-0.5 bg-amber-500 text-slate-950 rounded-full shadow-2xs">
-                  {lang === 'ur' ? 'نفیس جیولرز' : 'Nafees Jewellers'}
-                </span>
-              </div>
-              <div className="space-y-1">
-                <h4 className="text-lg font-black text-slate-900 urdu-text">
-                  {lang === 'ur' ? APP_CONFIG.shopNameUrdu : APP_CONFIG.shopNameEnglish}
-                </h4>
-                <p className="text-xs text-slate-600 urdu-text">
-                  {lang === 'ur' ? APP_CONFIG.shopAddressUrdu : APP_CONFIG.shopAddressEnglish}
-                </p>
-                <div className="flex flex-wrap items-center gap-3 pt-1 text-xs font-mono font-bold text-slate-700" dir="ltr">
-                  <span>📱 {APP_CONFIG.phone1}</span>
-                  {APP_CONFIG.phone2 && <span>📱 {APP_CONFIG.phone2}</span>}
+            
+            {/* Independent Store Picture */}
+            <div className="bg-gradient-to-br from-amber-50 to-sky-50 p-4 rounded-xl border border-amber-200/80 space-y-4">
+              <h4 className="text-sm font-bold text-amber-800 uppercase tracking-wide urdu-text">
+                {lang === 'ur' ? 'دکان کی تصویر / لوگو' : 'Store Picture / Logo'}
+              </h4>
+              <div className="flex items-center gap-4">
+                {currentSettings.shopLogo ? (
+                  <img src={currentSettings.shopLogo} alt="Store Logo" className="w-20 h-20 object-contain rounded-lg border border-amber-300" />
+                ) : (
+                  <div className="w-20 h-20 bg-white rounded-lg border border-dashed border-amber-300 flex items-center justify-center text-amber-400">
+                    <ShoppingBag size={24} />
+                  </div>
+                )}
+                <div className="flex flex-col gap-2">
+                  <label className="px-3 py-1.5 bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors cursor-pointer text-xs font-bold urdu-text text-center">
+                    {lang === 'ur' ? 'تصویر تبدیل کریں' : 'Change Picture'}
+                    <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onloadend = async () => {
+                          const b64 = reader.result;
+                          await db.settings.put({ key: 'shopLogo', value: b64 });
+                          setCurrentSettings(prev => ({ ...prev, shopLogo: b64 }));
+                          alert(lang === 'ur' ? 'تصویر کامیابی سے تبدیل ہو گئی' : 'Picture updated successfully');
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }} />
+                  </label>
+                  {currentSettings.shopLogo && (
+                    <button onClick={async () => {
+                      await db.settings.put({ key: 'shopLogo', value: '' });
+                      setCurrentSettings(prev => ({ ...prev, shopLogo: '' }));
+                      alert(lang === 'ur' ? 'تصویر حذف کر دی گئی' : 'Picture removed successfully');
+                    }} className="px-3 py-1.5 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors text-xs font-bold urdu-text">
+                      {lang === 'ur' ? 'تصویر ہٹائیں' : 'Delete Picture'}
+                    </button>
+                  )}
                 </div>
+              </div>
+            </div>
+
+            {/* Editable Store Information */}
+            <div className="bg-gradient-to-br from-amber-50 to-sky-50 p-4 rounded-xl border border-amber-200/80 space-y-4">
+              <h4 className="text-sm font-bold text-amber-800 uppercase tracking-wide urdu-text">
+                {lang === 'ur' ? 'دکان کی معلومات' : 'Store Information'}
+              </h4>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-bold text-zinc-500 urdu-text">{lang === 'ur' ? 'دکان کا نام' : 'Store Name'}</label>
+                  <input type="text" value={currentSettings.shopName || ''} onChange={e => setCurrentSettings(prev => ({ ...prev, shopName: e.target.value }))} className="w-full px-3 py-2 bg-white border border-sky-200 rounded-lg outline-none focus:ring-2 focus:ring-gold urdu-text" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-zinc-500 urdu-text">{lang === 'ur' ? 'پتہ' : 'Address'}</label>
+                  <input type="text" value={currentSettings.shopAddress || ''} onChange={e => setCurrentSettings(prev => ({ ...prev, shopAddress: e.target.value }))} className="w-full px-3 py-2 bg-white border border-sky-200 rounded-lg outline-none focus:ring-2 focus:ring-gold urdu-text" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-zinc-500 urdu-text">{lang === 'ur' ? 'فون 1' : 'Phone 1'}</label>
+                    <input type="text" value={currentSettings.shopPhone || ''} onChange={e => setCurrentSettings(prev => ({ ...prev, shopPhone: e.target.value }))} className="w-full px-3 py-2 bg-white border border-sky-200 rounded-lg outline-none focus:ring-2 focus:ring-gold font-mono text-sm" dir="ltr" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-zinc-500 urdu-text">{lang === 'ur' ? 'فون 2' : 'Phone 2'}</label>
+                    <input type="text" value={currentSettings.shopPhone2 || ''} onChange={e => setCurrentSettings(prev => ({ ...prev, shopPhone2: e.target.value }))} className="w-full px-3 py-2 bg-white border border-sky-200 rounded-lg outline-none focus:ring-2 focus:ring-gold font-mono text-sm" dir="ltr" />
+                  </div>
+                </div>
+                <button 
+                  onClick={async () => {
+                    await db.settings.put({ key: 'shopName', value: currentSettings.shopName });
+                    await db.settings.put({ key: 'shopAddress', value: currentSettings.shopAddress });
+                    await db.settings.put({ key: 'shopPhone', value: currentSettings.shopPhone });
+                    await db.settings.put({ key: 'shopPhone2', value: currentSettings.shopPhone2 });
+                    alert(lang === 'ur' ? 'دکان کی معلومات محفوظ ہو گئیں' : 'Store Information saved successfully');
+                    window.location.reload();
+                  }}
+                  className="w-full px-4 py-2 bg-gold text-black rounded-lg hover:bg-gold-light transition-colors shadow-lg font-bold flex items-center justify-center gap-2"
+                >
+                  <Save size={16} />
+                  <span className="urdu-text text-sm">{lang === 'ur' ? 'معلومات محفوظ کریں' : 'Save Information'}</span>
+                </button>
               </div>
             </div>
 
@@ -782,7 +850,7 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
                 <label className="text-xs font-bold text-zinc-500 urdu-text">{t.goldRate}</label>
                 <div className="flex gap-2">
                   <input 
-                    type="number" 
+                    type="number" step="any" 
                     value={rateInput || ''}
                     onChange={e => setRateInput(e.target.value)}
                     placeholder={lang === 'ur' ? 'نیا ریٹ درج کریں...' : 'Enter new rate...'}

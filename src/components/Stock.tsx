@@ -27,7 +27,7 @@ export default function Stock({ lang }: StockProps) {
   const [currentImg, setCurrentImg] = useState<string | null>(null);
   const [lightboxData, setLightboxData] = useState<{ src: string; title?: string; phone?: string; caption?: string } | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
-  const [formData, setFormData] = useState<Partial<StockItem>>({
+  const [formData, setFormData] = useState<any>({
     name: '',
     type: 'Gold',
     quantity: 0,
@@ -411,9 +411,9 @@ export default function Stock({ lang }: StockProps) {
               <div>
                 <label className="block text-sm font-medium text-zinc-500 mb-1 urdu-text">{lang === 'ur' ? 'وزن (Grams)' : 'Weight (g)'}</label>
                 <input 
-                  type="number" 
+                  type="number" step="any" 
                   value={formData.quantity || ''}
-                  onChange={e => setFormData({...formData, quantity: Number(e.target.value), unit: 'g'})}
+                  onChange={e => setFormData({...formData, quantity: (e.target.value === '' ? '' : e.target.value), unit: 'g'})}
                   className="w-full bg-white border border-sky-200 rounded-lg p-3 focus:border-gold outline-none text-black"
                   placeholder="0.000"
                 />
@@ -421,9 +421,9 @@ export default function Stock({ lang }: StockProps) {
               <div>
                 <label className="block text-sm font-medium text-zinc-500 mb-1 urdu-text">{lang === 'ur' ? 'تعداد (Pieces)' : 'Pieces (Qty)'}</label>
                 <input 
-                  type="number" 
+                  type="number" step="any" 
                   value={formData.pieces || ''}
-                  onChange={e => setFormData({...formData, pieces: Number(e.target.value)})}
+                  onChange={e => setFormData({...formData, pieces: (e.target.value === '' ? '' : e.target.value)})}
                   className="w-full bg-white border border-sky-200 rounded-lg p-3 focus:border-gold outline-none text-black"
                   placeholder="0"
                 />

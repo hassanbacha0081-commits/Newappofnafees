@@ -29,7 +29,7 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
   const [lightboxData, setLightboxData] = useState<{ src: string; title?: string; phone?: string; caption?: string } | null>(null);
   const [isContactPickerOpen, setIsContactPickerOpen] = useState(false);
   
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<any>({
     cName: '',
     cPhone: '',
     pricePerTola: 0,
@@ -219,7 +219,7 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
         p: formData.iQty || 1,
         mk: formData.iMk,
         r: formData.iRate,
-        t: (formData.iWt + formData.iMk) * formData.iRate + formData.iMazdori,
+        t: (Number(formData.iWt) + Number(formData.iMk)) * Number(formData.iRate) + Number(formData.iMazdori),
         img: lastImg
       };
       setBillItems([...billItems, newItem]);
@@ -276,9 +276,9 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
       phone: formData.cPhone || "-",
       items: [...billItems],
       total: total,
-      rec: formData.recAmt,
+      rec: Number(formData.recAmt) || 0,
       rem: total - formData.recAmt - formData.discount,
-      discount: formData.discount,
+      discount: Number(formData.discount) || 0,
       date: editingSale ? editingSale.date : formatDate(new Date(), 'ur-PK')
     };
 
@@ -563,11 +563,11 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
                 <label className="text-sm font-bold text-zinc-700 ml-1 urdu-text">{lang === 'ur' ? 'قیمت فی تولہ' : 'Price per Tola'}</label>
                 <div className="relative">
                   <input
-                    type="number"
+                    type="number" step="any"
                     value={formData.pricePerTola || ''}
                     placeholder="0.00"
                     onChange={e => {
-                      const val = Number(e.target.value);
+                      const val = (e.target.value === '' ? '' : e.target.value);
                       setFormData({ ...formData, pricePerTola: val, iRate: Number((val / 12).toFixed(2)) });
                     }}
                     className="w-full pl-6 pr-12 py-5 bg-sky-900 text-gold border-none rounded-2xl focus:ring-4 focus:ring-gold/20 outline-none transition-all text-3xl font-black shadow-inner tracking-widest"
@@ -579,10 +579,10 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
                 <label className="text-sm font-bold text-zinc-700 ml-1 urdu-text">{lang === 'ur' ? 'ماشہ' : 'Masha'}</label>
                 <div className="relative">
                   <input
-                    type="number"
+                    type="number" step="any"
                     value={formData.iRate || ''}
                     placeholder="0.00"
-                    onChange={e => setFormData({ ...formData, iRate: Number(e.target.value) })}
+                    onChange={e => setFormData({ ...formData, iRate: (e.target.value === '' ? '' : e.target.value) })}
                     className="w-full pl-6 pr-12 py-5 bg-sky-50 text-sky-900 border border-sky-200 rounded-2xl focus:ring-4 focus:ring-gold/20 outline-none transition-all text-3xl font-black shadow-inner tracking-widest"
                   />
                   <span className="absolute right-5 top-1/2 -translate-y-1/2 font-bold text-zinc-500 text-xs">PKR</span>
@@ -613,10 +613,10 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
                 <label className="text-sm font-bold text-zinc-700 ml-1 urdu-text">{lang === 'ur' ? 'تعداد (Qty/Pieces)' : 'Pieces'}</label>
                 <div className="relative">
                   <input
-                    type="number"
+                    type="number" step="any"
                     placeholder="1"
                     value={formData.iQty || ''}
-                    onChange={e => setFormData({ ...formData, iQty: Number(e.target.value) })}
+                    onChange={e => setFormData({ ...formData, iQty: (e.target.value === '' ? '' : e.target.value) })}
                     className="w-full px-5 py-4 bg-sky-50 border border-sky-100 rounded-2xl focus:ring-2 focus:ring-gold focus:bg-white outline-none transition-all text-xl font-mono font-bold text-right pr-16"
                   />
                   <span className="absolute right-5 top-1/2 -translate-y-1/2 font-bold text-zinc-400 text-xs uppercase">Pcs</span>
@@ -626,10 +626,10 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
                 <label className="text-sm font-bold text-zinc-700 ml-1 urdu-text tracking-tighter">{lang === 'ur' ? 'وزن (Gram)' : 'Weight'}</label>
                 <div className="relative">
                   <input
-                    type="number"
+                    type="number" step="any"
                     placeholder="0.000"
                     value={formData.iWt || ''}
-                    onChange={e => setFormData({ ...formData, iWt: Number(e.target.value) })}
+                    onChange={e => setFormData({ ...formData, iWt: (e.target.value === '' ? '' : e.target.value) })}
                     className="w-full px-5 py-4 bg-sky-50 border border-sky-100 rounded-2xl focus:ring-2 focus:ring-gold focus:bg-white outline-none transition-all text-xl font-mono font-bold text-right pr-16"
                   />
                   <span className="absolute right-5 top-1/2 -translate-y-1/2 font-bold text-zinc-400 text-xs">GRAM</span>
@@ -639,10 +639,10 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
                 <label className="text-sm font-bold text-zinc-700 ml-1 urdu-text">{t.making}</label>
                 <div className="relative">
                   <input
-                    type="number"
+                    type="number" step="any"
                     placeholder="0.00"
                     value={formData.iMk || ''}
-                    onChange={e => setFormData({ ...formData, iMk: Number(e.target.value) })}
+                    onChange={e => setFormData({ ...formData, iMk: (e.target.value === '' ? '' : e.target.value) })}
                     className="w-full px-5 py-4 bg-sky-50 border border-sky-100 rounded-2xl focus:ring-2 focus:ring-gold focus:bg-white outline-none transition-all text-xl font-mono font-bold text-right"
                   />
                 </div>
@@ -651,10 +651,10 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
                 <label className="text-sm font-bold text-zinc-700 ml-1 urdu-text">{t.labor}</label>
                 <div className="relative">
                   <input
-                    type="number"
+                    type="number" step="any"
                     placeholder="0.00"
                     value={formData.iMazdori || ''}
-                    onChange={e => setFormData({ ...formData, iMazdori: Number(e.target.value) })}
+                    onChange={e => setFormData({ ...formData, iMazdori: (e.target.value === '' ? '' : e.target.value) })}
                     className="w-full px-5 py-4 bg-sky-50 border border-sky-100 rounded-2xl focus:ring-2 focus:ring-gold focus:bg-white outline-none transition-all text-xl font-mono font-bold text-right"
                   />
                 </div>
@@ -840,20 +840,20 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-zinc-500 ml-1 urdu-text">{t.totalWeight}</label>
                   <input
-                    type="number"
+                    type="number" step="any"
                     placeholder="0.00"
                     value={formData.oTotalWt || ''}
-                    onChange={e => setFormData({ ...formData, oTotalWt: Number(e.target.value) })}
+                    onChange={e => setFormData({ ...formData, oTotalWt: (e.target.value === '' ? '' : e.target.value) })}
                     className="w-full px-4 py-2 bg-sky-50 border border-sky-100 rounded-xl focus:bg-white text-sm font-bold text-zinc-700"
                   />
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-zinc-500 ml-1 urdu-text">{t.netWeight}</label>
                   <input
-                    type="number"
+                    type="number" step="any"
                     placeholder="0.00"
                     value={formData.oNetWt || ''}
-                    onChange={e => setFormData({ ...formData, oNetWt: Number(e.target.value) })}
+                    onChange={e => setFormData({ ...formData, oNetWt: (e.target.value === '' ? '' : e.target.value) })}
                     className="w-full px-4 py-2 bg-sky-50 border border-sky-100 rounded-xl focus:bg-white text-sm font-bold text-zinc-700"
                   />
                 </div>
@@ -884,9 +884,9 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
                 <span className="text-zinc-500 font-bold urdu-text">{t.receivedAmount}</span>
                 <div className="relative">
                   <input
-                    type="number"
+                    type="number" step="any"
                     value={formData.recAmt || ''}
-                    onChange={e => setFormData({ ...formData, recAmt: Number(e.target.value) })}
+                    onChange={e => setFormData({ ...formData, recAmt: (e.target.value === '' ? '' : e.target.value) })}
                     className="w-32 px-4 py-2 bg-white border border-sky-100 rounded-xl text-right font-black text-zinc-900 focus:ring-2 focus:ring-gold outline-none"
                   />
                   <span className="absolute -top-1 -right-1 flex h-3 w-3">
@@ -898,9 +898,9 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
               <div className="flex justify-between items-center bg-sky-50 p-4 rounded-2xl border border-sky-100 mt-4">
                 <span className="text-zinc-500 font-bold urdu-text">{lang === 'ur' ? 'رعایت / چھوٹ (Discount)' : 'Discount'}</span>
                 <input
-                  type="number"
+                  type="number" step="any"
                   value={formData.discount || ''}
-                  onChange={e => setFormData({ ...formData, discount: Number(e.target.value) })}
+                  onChange={e => setFormData({ ...formData, discount: (e.target.value === '' ? '' : e.target.value) })}
                   className="w-32 px-4 py-2 bg-white border border-sky-100 rounded-xl text-right font-black text-zinc-900 focus:ring-2 focus:ring-gold outline-none"
                 />
               </div>

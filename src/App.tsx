@@ -81,6 +81,7 @@ export default function App() {
   const [shopAddress, setShopAddress] = useState<string>(translations.ur.shopAddress);
   const [shopPhone, setShopPhone] = useState<string>(translations.ur.shopPhone);
   const [shopPhone2, setShopPhone2] = useState<string>(translations.ur.shopPhone2);
+  const [shopLogo, setShopLogo] = useState<string | null>(null);
   const [paletteId, setPaletteId] = useState<string>('royal');
   const [isLoading, setIsLoading] = useState(true);
   
@@ -106,6 +107,7 @@ export default function App() {
       const address = await db.settings.get('shopAddress');
       const phone = await db.settings.get('shopPhone');
       const phone2 = await db.settings.get('shopPhone2');
+      const logo = await db.settings.get('shopLogo');
       const pin = await db.settings.get('appPin');
       const autoBackupFreq = await db.settings.get('autoBackupFrequency');
       const lastBackupDate = await db.settings.get('lastBackupDate');
@@ -126,6 +128,7 @@ export default function App() {
       if (address) setShopAddress(address.value);
       if (phone) setShopPhone(phone.value);
       if (phone2) setShopPhone2(phone2.value);
+      if (logo && logo.value) setShopLogo(logo.value);
       if (paletteSetting) setPaletteId(paletteSetting.value);
       if (pin && pin.value) {
         setAppPin(pin.value);
@@ -422,7 +425,7 @@ export default function App() {
     return (
       <div className="fixed inset-0 bg-sky-400 flex flex-col items-center justify-center text-gold-dark">
         <div className="w-24 h-24 bg-white border-2 border-gold rounded-full flex items-center justify-center mb-4 shadow-lg">
-          <img src={APP_CONFIG.appIcon} alt="Logo" className="w-16 h-16 object-contain" referrerPolicy="no-referrer" />
+          <img src={(shopLogo || APP_CONFIG.appIcon)} alt="Logo" className="w-16 h-16 object-contain" referrerPolicy="no-referrer" />
         </div>
         <h1 className="text-3xl font-bold urdu-text text-white">{shopName}</h1>
         <div className="mt-4 animate-pulse text-white-60">Loading...</div>
@@ -435,6 +438,7 @@ export default function App() {
       <>
         <style dangerouslySetInnerHTML={{ __html: getPaletteStyles(paletteId) }} />
         <LockScreen 
+          shopLogo={shopLogo || APP_CONFIG.appIcon}
           lang={lang} 
           correctPin={appPin} 
           shopName={shopName}
@@ -458,7 +462,7 @@ export default function App() {
         <div className="p-8 border-b border-sky-500 flex flex-col items-center gap-4 bg-sky-700/50">
           <div className="relative group">
             <div className="absolute inset-0 bg-white blur-lg opacity-10 group-hover:opacity-20 transition-opacity"></div>
-            <img src={APP_CONFIG.appIcon} alt="Logo" className="w-20 h-20 object-contain rounded-2xl bg-white border border-gold-30 p-2 relative z-10 shadow-xl" referrerPolicy="no-referrer" />
+            <img src={(shopLogo || APP_CONFIG.appIcon)} alt="Logo" className="w-20 h-20 object-contain rounded-2xl bg-white border border-gold-30 p-2 relative z-10 shadow-xl" referrerPolicy="no-referrer" />
           </div>
           <div className="text-center space-y-1">
             <h1 className="text-2xl font-bold urdu-text text-white tracking-tight">{shopName}</h1>
