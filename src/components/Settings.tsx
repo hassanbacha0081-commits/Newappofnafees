@@ -3,14 +3,13 @@ import { db } from '../db';
 import { translations, type Language } from '../translations';
 import { APP_CONFIG } from '../config';
 import { COLOR_PALETTES, type ColorPalette } from '../lib/colors';
-import { Save, Download, Upload, Languages, Trash2, AlertTriangle, BadgeDollarSign, History, ShoppingBag, Cloud, CloudOff, RefreshCw, Calendar } from 'lucide-react';
+import { Save, Download, Upload, Languages, Trash2, AlertTriangle, BadgeDollarSign, History, ShoppingBag, Cloud, CloudOff, RefreshCw, Calendar, ExternalLink, CheckCircle2, AlertCircle, ShieldCheck } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { SecurityModal } from './SecurityModal';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import PdfExportHidden, { PdfExportRef, PdfSection } from './PdfExportHidden';
-import CloudSyncManager from './CloudSyncManager';
 import { 
   addAuthListener, 
   googleSignIn, 
@@ -20,6 +19,7 @@ import {
   downloadBackupContent,
   ensureAccessToken
 } from '../lib/googleDriveBackup';
+import { useSyncStatus, runFullSync, getFirestoreQuotaUpgradeUrl } from '../lib/syncEngine';
 
 interface SettingsProps {
   lang: Language;
@@ -114,6 +114,30 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [lastDriveBackup, setLastDriveBackup] = useState<string | null>(null);
   const [driveStatusMessage, setDriveStatusMessage] = useState<string>('');
+
+  // Live Cloud Sync Status
+  const syncStatus = useSyncStatus();
+  const [isManualSyncing, setIsManualSyncing] = useState(false);
+  const [manualSyncFeedback, setManualSyncFeedback] = useState<string | null>(null);
+
+  const handleManualCloudSync = async () => {
+    setIsManualSyncing(true);
+    setManualSyncFeedback(null);
+    try {
+      const res = await runFullSync(true);
+      if (res.success) {
+        setManualSyncFeedback(lang === 'ur' ? 'کلاؤڈ سنک کامیابی سے مکمل ہو گیا!' : 'Cloud sync completed successfully!');
+      } else if (syncStatus.isQuotaExceeded) {
+        setManualSyncFeedback(lang === 'ur' ? 'فائر بیس یومیہ کوٹہ عارضی طور پر مکمل ہے۔ ڈیٹا لوکل محفوظ ہے۔' : 'Firestore daily quota reached. Local data is 100% safe.');
+      } else {
+        setManualSyncFeedback(res.error || (lang === 'ur' ? 'سنک میں مسئلہ پیش آیا' : 'Sync encountered an issue'));
+      }
+    } catch (e: any) {
+      setManualSyncFeedback(e.message || String(e));
+    } finally {
+      setIsManualSyncing(false);
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = addAuthListener(async (user, token) => {
@@ -906,153 +930,130 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
             </div>
           </div>
 
-          {/* Data Management - HIGHLIGHTED */}
-          <div className="bg-white p-8 rounded-2xl shadow-xl border-2 border-gold space-y-6 relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-3 bg-gold text-black text-[10px] font-black uppercase tracking-widest rounded-bl-xl">
-              Enterprise Cloud & Data
+          
+          {/* Cloud Database Synchronization & Quota Status */}
+          <div className="bg-white p-8 rounded-2xl shadow-xl border border-sky-100 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-sky-100 pb-4">
+              <h3 className="text-xl font-bold text-sky-900 urdu-text flex items-center gap-3">
+                <Cloud className="text-sky-600" />
+                <span>{lang === 'ur' ? 'کلاؤڈ ڈیٹا سنک (Firebase Cloud Sync)' : 'Cloud Data Sync (Firebase)'}</span>
+              </h3>
+              <div className="flex items-center gap-2">
+                {syncStatus.isQuotaExceeded ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-100 text-amber-900 border border-amber-300 rounded-full text-xs font-bold urdu-text">
+                    <AlertTriangle size={14} className="text-amber-600" />
+                    <span>{lang === 'ur' ? 'یومیہ کوٹہ مکمل (لوکل محفوظ)' : 'Daily Quota Limit (Local Safe)'}</span>
+                  </span>
+                ) : syncStatus.isSyncing ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-sky-100 text-sky-800 border border-sky-300 rounded-full text-xs font-bold urdu-text">
+                    <RefreshCw size={14} className="animate-spin text-sky-600" />
+                    <span>{lang === 'ur' ? 'سنک ہو رہا ہے...' : 'Syncing...'}</span>
+                  </span>
+                ) : syncStatus.pendingCount > 0 ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-100 text-blue-800 border border-blue-300 rounded-full text-xs font-bold urdu-text">
+                    <RefreshCw size={14} className="text-blue-600" />
+                    <span>{syncStatus.pendingCount} {lang === 'ur' ? 'تبدیلیاں قطار میں' : 'changes pending'}</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-full text-xs font-bold urdu-text">
+                    <CheckCircle2 size={14} className="text-emerald-600" />
+                    <span>{lang === 'ur' ? 'کامیابی سے منسلک' : 'Synced & Live'}</span>
+                  </span>
+                )}
+              </div>
             </div>
-            <h3 className="text-xl font-bold text-sky-900 border-b border-sky-100 pb-4 urdu-text flex items-center gap-3">
-              <Download className="text-gold" />
-              {lang === 'ur' ? 'کلاؤڈ سنکرونائزیشن اور بیک اپ مینجمنٹ' : 'Cloud Synchronization & Backup Management'}
-            </h3>
 
-            {/* Central Cloud Synchronization Manager */}
-            <CloudSyncManager lang={lang} onSafetyBackup={handleBackup} />
-
-            {/* Google Drive Automated Backup Section */}
-            <div className="p-6 bg-sky-50 rounded-2xl border border-sky-200/60 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Cloud className="text-sky-600 animate-pulse" size={24} />
-                  <div>
-                    <h4 className="font-bold text-sky-900 urdu-text">
-                      {lang === 'ur' ? 'گوگل ڈرائیو آٹو بیک اپ' : 'Google Drive Auto-Backup'}
+            {/* Quota Exceeded Notice Box */}
+            {syncStatus.isQuotaExceeded && (
+              <div className="p-4 bg-amber-50 border-2 border-amber-200 rounded-2xl space-y-3">
+                <div className="flex items-start gap-3">
+                  <ShieldCheck className="text-amber-700 flex-shrink-0 mt-0.5" size={22} />
+                  <div className="space-y-1">
+                    <h4 className="font-bold text-amber-900 text-sm urdu-text">
+                      {lang === 'ur' ? 'آپ کا ڈیٹا 100% محفوظ ہے!' : 'Your Data is 100% Safe Locally!'}
                     </h4>
-                    <p className="text-[11px] text-sky-600 urdu-text">
-                      {lang === 'ur' ? 'ڈیٹا محفوظ اور خودکار طریقے سے گوگل ڈرائیو پر اپ لوڈ ہوتا رہے گا' : 'Secure background sync to Google Drive'}
+                    <p className="text-xs text-amber-800 leading-relaxed urdu-text">
+                      {lang === 'ur' 
+                        ? 'فائر بیس کلاؤڈ ڈیٹا بیس کا مفت یومیہ ریڈ کوٹہ عارضی طور پر مکمل ہو گیا ہے۔ تمام بل، خریداریاں، کسٹمرز اور کلاؤڈ تبدیلیاں اس ڈیوائس پر فوری محفوظ ہو چکی ہیں۔ جیسے ہی اگلے 24 گھنٹوں میں کوٹہ ری سیٹ ہوگا، بیک گراؤنڈ سنک خود بخود بحال ہو جائے گا۔'
+                        : 'The Firebase Spark free tier daily read quota has been reached. All invoices, purchases, contacts, and transactions are completely preserved on this local device. Automatic background sync will resume when the quota resets.'}
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-sky-200/50 text-sky-700">
-                  <span className={`w-2 h-2 rounded-full ${gUser && gToken ? 'bg-emerald-500 animate-ping' : gUser ? 'bg-amber-500' : 'bg-zinc-400'}`} />
-                  {gUser && gToken ? (lang === 'ur' ? 'مربوط (Active)' : 'Active') : gUser ? (lang === 'ur' ? 'اجازت درکار ہے' : 'Needs Access') : (lang === 'ur' ? 'منقطع (Offline)' : 'Offline')}
+
+                <div className="pt-2 flex flex-wrap gap-2">
+                  <a
+                    href={getFirestoreQuotaUpgradeUrl()}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+                  >
+                    <ExternalLink size={14} />
+                    <span className="urdu-text">{lang === 'ur' ? 'فائر بیس کنسول میں اپ گریڈ دیکھیں' : 'View in Firebase Console (Upgrade)'}</span>
+                  </a>
                 </div>
               </div>
+            )}
 
-              {gUser ? (
-                <div className="space-y-3">
-                  {!gToken && (
-                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between gap-2 text-xs text-amber-900">
-                      <span className="urdu-text">{lang === 'ur' ? 'گوگل ڈرائیو بیک اپ کی اجازت کی ضرورت ہے۔' : 'Google Drive authorization required for backup.'}</span>
-                      <button 
-                        onClick={handleGoogleConnect}
-                        disabled={isGoogleLoading}
-                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs shrink-0 transition-colors"
-                      >
-                        {lang === 'ur' ? 'اجازت دیں' : 'Authorize Drive'}
-                      </button>
-                    </div>
-                  )}
+            {/* Controls & Statistics */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-4 bg-sky-50 rounded-xl border border-sky-100">
+                <span className="text-[10px] text-sky-600 uppercase font-bold tracking-wider block">
+                  {lang === 'ur' ? 'آخری سنک کا وقت' : 'Last Sync Time'}
+                </span>
+                <span className="text-sm font-black text-sky-950 font-mono mt-1 block">
+                  {syncStatus.lastSyncTime ? new Date(syncStatus.lastSyncTime).toLocaleTimeString() : (lang === 'ur' ? 'ابھی نہیں' : 'Never')}
+                </span>
+              </div>
 
-                  <div className="p-3 bg-white rounded-xl border border-sky-100 text-xs text-zinc-600 space-y-1">
-                    <div className="flex justify-between">
-                      <span className="font-semibold">{lang === 'ur' ? 'مربوط اکاؤنٹ:' : 'Connected Account:'}</span>
-                      <span className="font-mono text-sky-700 font-medium">{gUser.email}</span>
-                    </div>
-                    {lastDriveBackup && (
-                      <div className="flex justify-between">
-                        <span className="font-semibold">{lang === 'ur' ? 'آخری خودکار بیک اپ:' : 'Last Backup Time:'}</span>
-                        <span className="font-mono text-zinc-500">{new Date(lastDriveBackup).toLocaleString(lang === 'ur' ? 'ur-PK' : 'en-US')}</span>
-                      </div>
-                    )}
-                    {driveStatusMessage && (
-                      <p className="text-[11px] text-amber-700 mt-2 font-medium bg-amber-50 px-2.5 py-1.5 rounded border border-amber-100/50">{driveStatusMessage}</p>
-                    )}
-                  </div>
+              <div className="p-4 bg-sky-50 rounded-xl border border-sky-100">
+                <span className="text-[10px] text-sky-600 uppercase font-bold tracking-wider block">
+                  {lang === 'ur' ? 'قطار میں تبدیلیاں' : 'Pending Cloud Queue'}
+                </span>
+                <span className="text-sm font-black text-sky-950 font-mono mt-1 block">
+                  {syncStatus.pendingCount} {lang === 'ur' ? 'آئٹمز' : 'items'}
+                </span>
+              </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={handleManualDriveBackup}
-                      disabled={isGoogleLoading}
-                      className="flex items-center justify-center gap-1.5 py-2 px-3 bg-sky-600 text-white text-xs font-bold rounded-lg hover:bg-sky-700 transition-colors disabled:opacity-50"
-                    >
-                      <RefreshCw size={14} className={isGoogleLoading ? 'animate-spin' : ''} />
-                      <span className="urdu-text">{lang === 'ur' ? 'ابھی بیک اپ کریں' : 'Backup Now'}</span>
-                    </button>
+              <div className="p-4 bg-sky-50 rounded-xl border border-sky-100">
+                <span className="text-[10px] text-sky-600 uppercase font-bold tracking-wider block">
+                  {lang === 'ur' ? 'انٹرنیٹ رابطہ' : 'Connection'}
+                </span>
+                <span className={`text-sm font-black font-mono mt-1 block ${syncStatus.isOnline ? 'text-emerald-700' : 'text-zinc-500'}`}>
+                  {syncStatus.isOnline ? (lang === 'ur' ? 'آن لائن (Online)' : 'Online') : (lang === 'ur' ? 'آف لائن (Offline)' : 'Offline')}
+                </span>
+              </div>
+            </div>
 
-                    <button
-                      onClick={handleManualDriveRestore}
-                      disabled={isGoogleLoading}
-                      className="flex items-center justify-center gap-1.5 py-2 px-3 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-50"
-                    >
-                      <Cloud className="text-white" size={14} />
-                      <span className="urdu-text">{lang === 'ur' ? 'بیک اپ سے بحال کریں' : 'Restore from Drive'}</span>
-                    </button>
-                  </div>
+            {/* Manual Sync Button */}
+            <div className="pt-2 flex flex-col sm:flex-row items-center gap-3">
+              <button
+                type="button"
+                onClick={handleManualCloudSync}
+                disabled={isManualSyncing || !syncStatus.isOnline}
+                className="w-full sm:w-auto px-6 py-3 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white rounded-xl font-bold text-sm urdu-text flex items-center justify-center gap-2 transition-all shadow-md active:scale-95"
+              >
+                <RefreshCw size={16} className={isManualSyncing ? 'animate-spin' : ''} />
+                <span>
+                  {isManualSyncing 
+                    ? (lang === 'ur' ? 'سنک ہو رہا ہے...' : 'Syncing...') 
+                    : (lang === 'ur' ? 'ابھی سنک کریں (Sync Now)' : 'Sync Now')}
+                </span>
+              </button>
 
-                  <button
-                    onClick={handleGoogleDisconnect}
-                    className="w-full text-center text-red-500 hover:text-red-700 text-[11px] font-bold underline"
-                  >
-                    {lang === 'ur' ? 'گوگل ڈرائیو منقطع کریں' : 'Disconnect Google Account'}
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-3 pt-1">
-                  <p className="text-xs text-zinc-500 leading-relaxed urdu-text">
-                    {lang === 'ur' 
-                      ? 'اپنے ریکارڈز، بل، اور گاہکوں کے ڈیٹا کو خود بخود اپنے محفوظ گوگل ڈرائیو پر اپ لوڈ کریں۔ ایپ انسٹال کرنے پر آپ سارا ڈیٹا ایک کلک میں واپس لا سکیں گے۔' 
-                      : 'Automatically back up your records, bills, and customer list securely to Google Drive. Keep your shop data safe and restore with a single click on reinstall.'}
-                  </p>
-
-                  <button
-                    onClick={handleGoogleConnect}
-                    disabled={isGoogleLoading}
-                    className="gsi-material-button w-full flex items-center justify-center gap-3 py-2.5 bg-white border border-zinc-300 rounded-lg hover:bg-zinc-50 transition-colors disabled:opacity-50 text-xs font-medium text-zinc-700 shadow-sm"
-                  >
-                    <div className="gsi-material-button-icon">
-                      <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" style={{ display: 'block', width: '20px', height: '20px' }}>
-                        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
-                        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
-                        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
-                        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
-                        <path fill="none" d="M0 0h48v48H0z"></path>
-                      </svg>
-                    </div>
-                    <span className="gsi-material-button-contents font-semibold">{lang === 'ur' ? 'گوگل اکاؤنٹ مربوط کریں' : 'Connect Google Account'}</span>
-                  </button>
-                  {driveStatusMessage && (
-                    <p className="text-[11px] text-red-600 text-center">{driveStatusMessage}</p>
-                  )}
-                </div>
+              {manualSyncFeedback && (
+                <span className="text-xs text-sky-800 font-bold urdu-text">
+                  {manualSyncFeedback}
+                </span>
               )}
             </div>
+          </div>
 
-            <div className="p-4 bg-sky-50 rounded-xl border border-sky-100 mt-4 mb-4">
-              <div>
-                <p className="font-bold text-sky-900 urdu-text">{lang === 'ur' ? 'آٹو بیک اپ سیٹنگ' : 'Auto Backup Setting'}</p>
-                <p className="text-xs text-sky-600 urdu-text mt-1">{lang === 'ur' ? 'منتخب کردہ وقت کے بعد ایپ خودکار بیک اپ لے گی' : 'App will automatically backup data after the selected time'}</p>
-              </div>
-              <div className="mt-3">
-                <select 
-                  className="w-full p-3 bg-white border border-sky-200 rounded-lg outline-none focus:border-gold text-black"
-                  value={currentSettings.autoBackupFrequency}
-                  onChange={async (e) => {
-                    const val = e.target.value;
-                    await db.settings.put({ key: 'autoBackupFrequency', value: val });
-                    // Also reset last backup date when changing frequency to start the timer from now
-                    await db.settings.put({ key: 'lastBackupDate', value: new Date().toISOString() });
-                    setCurrentSettings(prev => ({ ...prev, autoBackupFrequency: val }));
-                  }}
-                >
-                  <option value="none">{lang === 'ur' ? 'کوئی نہیں (None)' : 'None'}</option>
-                  <option value="7">{lang === 'ur' ? 'ہفتہ وار (Weekly)' : 'Weekly'}</option>
-                  <option value="15">{lang === 'ur' ? '15 دن بعد (15 Days)' : '15 Days'}</option>
-                  <option value="30">{lang === 'ur' ? 'ماہانہ (Monthly)' : 'Monthly'}</option>
-                </select>
-              </div>
-            </div>
-
+          {/* Data Backup & Recovery */}
+          <div className="bg-white p-8 rounded-2xl shadow-xl border border-sky-100 space-y-6">
+            <h3 className="text-xl font-bold text-sky-900 border-b border-sky-100 pb-4 urdu-text flex items-center gap-3">
+              <Download className="text-sky-600" />
+              {lang === 'ur' ? 'مقامی بیک اپ اور بحالی' : 'Local Backup & Restore'}
+            </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <button 
                 onClick={handleBackup}

@@ -15,6 +15,7 @@ interface PurchasesProps {
 }
 
 import ImageLightbox from './ImageLightbox';
+import ImageManager from './ImageManager';
 import ContactPickerModal from './ContactPickerModal';
 
 export default function Purchases({ lang }: PurchasesProps) {
@@ -317,60 +318,22 @@ export default function Purchases({ lang }: PurchasesProps) {
               </div>
 
               <div className="space-y-4 pt-4">
-                <div className="flex items-center justify-between">
-                  <label className={`text-sm font-bold text-zinc-700 ml-1 ${isUrdu ? 'urdu-text' : ''}`}>{t.captureImage}</label>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-6">
-                  <button 
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-full sm:w-40 h-40 border-2 border-dashed border-sky-100 rounded-3xl flex flex-col items-center justify-center text-sky-400 hover:text-gold hover:border-gold hover:bg-gold/5 transition-all group shrink-0"
-                  >
-                    <div className="bg-white p-4 rounded-2xl group-hover:bg-gold group-hover:text-black transition-colors">
-                      <Camera size={32} />
-                    </div>
-                    <span className={`text-xs font-bold mt-3 ${isUrdu ? 'urdu-text' : ''}`}>{img ? t.retakeImage : t.captureImage}</span>
-                  </button>
-                  {img && (
-                    <div 
-                      onClick={() => setLightboxData({
-                        src: img,
-                        title: name ? `${name} - ${isUrdu ? 'خریداری' : 'Purchase'}` : (isUrdu ? 'خریداری تصویر' : 'Purchase Image'),
-                        phone: phone,
-                        caption: `*نفیس جیولرز - سونا خریداری رسید*\nبیچنے والے کا نام: ${name || '-'}\nفون: ${phone || '-'}\nوزن: ${weight || 0}g\nریٹ: Rs. ${rate || 0}\nکل رقم: Rs. ${calculateTotal().toLocaleString()}`
-                      })}
-                      className="h-52 flex-1 rounded-3xl bg-sky-50 overflow-hidden border border-sky-100 shadow-inner group relative cursor-pointer"
-                      title={isUrdu ? 'بڑی تصویر دیکھیں' : 'View Large Image'}
-                    >
-                      <img src={img} alt="Gold Image" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 hover:opacity-95" />
-                      <button
-                        type="button"
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          await shareImageToWhatsApp({
-                            imageSrc: img,
-                            phone: phone,
-                            caption: `*نفیس جیولرز - سونا خریداری رسید*\nبیچنے والے کا نام: ${name || '-'}\nفون: ${phone || '-'}\nوزن: ${weight || 0}g\nریٹ: Rs. ${rate || 0}\nکل رقم: Rs. ${calculateTotal().toLocaleString()}`,
-                            title: `Gold Purchase - ${name}`
-                          });
-                        }}
-                        className="absolute bottom-3 right-3 p-2.5 bg-green-600 hover:bg-green-700 text-white rounded-full shadow-lg transition-colors flex items-center gap-1.5 font-bold text-xs"
-                        title="Share on WhatsApp"
-                      >
-                        <MessageCircle size={16} />
-                        <span className="urdu-text">{isUrdu ? 'واٹس ایپ تصویر' : 'WhatsApp'}</span>
-                      </button>
-                    </div>
-                  )}
-                  <input 
-                    type="file" 
-                    accept="image/*" 
-                    capture="environment"
-                    ref={fileInputRef}
-                    className="hidden"
-                    onChange={handleImageCapture}
-                  />
-                </div>
+                <ImageManager
+                  image={img}
+                  onChange={setImg}
+                  lang={lang}
+                  label={t.captureImage}
+                  phone={phone}
+                  title={name ? `${name} - ${isUrdu ? 'خریداری' : 'Purchase'}` : (isUrdu ? 'خریداری تصویر' : 'Purchase Image')}
+                  caption={`*نفیس جیولرز - سونا خریداری رسید*\nبیچنے والے کا نام: ${name || '-'}\nفون: ${phone || '-'}\nوزن: ${weight || 0}g\nریٹ: Rs. ${rate || 0}\nکل رقم: Rs. ${calculateTotal().toLocaleString()}`}
+                  idPrefix="purchases-form-img"
+                  onPreviewClick={(src) => setLightboxData({
+                    src,
+                    title: name ? `${name} - ${isUrdu ? 'خریداری' : 'Purchase'}` : (isUrdu ? 'خریداری تصویر' : 'Purchase Image'),
+                    phone: phone,
+                    caption: `*نفیس جیولرز - سونا خریداری رسید*\nبیچنے والے کا نام: ${name || '-'}\nفون: ${phone || '-'}\nوزن: ${weight || 0}g\nریٹ: Rs. ${rate || 0}\nکل رقم: Rs. ${calculateTotal().toLocaleString()}`
+                  })}
+                />
               </div>
 
               <div className="flex flex-col sm:flex-row gap-4 pt-8 border-t border-sky-100">

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, ZoomIn, ZoomOut, RotateCw, Download, MessageCircle, Check, Send } from 'lucide-react';
+import { X, ZoomIn, ZoomOut, RotateCw, Download, MessageCircle, Check, Send, Camera, Trash2, Edit3 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { shareImageToWhatsApp } from '../lib/utils';
 
@@ -9,9 +9,11 @@ interface ImageLightboxProps {
   title?: string;
   phone?: string;
   caption?: string;
+  onUpdate?: () => void;
+  onDelete?: () => void;
 }
 
-export default function ImageLightbox({ src, onClose, title, phone, caption }: ImageLightboxProps) {
+export default function ImageLightbox({ src, onClose, title, phone, caption, onUpdate, onDelete }: ImageLightboxProps) {
   const [scale, setScale] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [customPhone, setCustomPhone] = useState(phone || '');
@@ -57,6 +59,32 @@ export default function ImageLightbox({ src, onClose, title, phone, caption }: I
           )}
         </div>
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          {/* Update / Change Image Button if onUpdate is provided */}
+          {onUpdate && (
+            <button 
+              type="button"
+              onClick={onUpdate}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-bold text-xs shadow-lg transition-all active:scale-95 cursor-pointer"
+              title="Change/Update Image"
+            >
+              <Camera size={15} />
+              <span>تصویر بدلیں (Update)</span>
+            </button>
+          )}
+
+          {/* Delete Image Button if onDelete is provided */}
+          {onDelete && (
+            <button 
+              type="button"
+              onClick={onDelete}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg font-bold text-xs shadow-lg transition-all active:scale-95 cursor-pointer"
+              title="Delete Image"
+            >
+              <Trash2 size={15} />
+              <span>حذف کریں</span>
+            </button>
+          )}
+
           {/* WhatsApp Direct Share Button */}
           <button 
             type="button"

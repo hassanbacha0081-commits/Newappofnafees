@@ -22,6 +22,7 @@ interface KarigarProps {
 }
 
 import ImageLightbox from './ImageLightbox';
+import ImageManager from './ImageManager';
 import ContactPickerModal from './ContactPickerModal';
 
 export default function Karigar({ lang }: KarigarProps) {
@@ -483,88 +484,22 @@ export default function Karigar({ lang }: KarigarProps) {
         </div>
         
         <div className="mt-6 space-y-3">
-          <label className="text-sm text-zinc-500 urdu-text block text-right pr-2">{t.karigarLabels.labReport}</label>
-          <div className="flex flex-col gap-4">
-            <div className="w-full flex gap-2">
-              <div className="flex-1">
-                <input 
-                  type="file" 
-                  accept="image/*" 
-                  capture="environment"
-                  onChange={handleFileChange}
-                  className="hidden"
-                  id="karigarCameraInput"
-                />
-                <label 
-                  htmlFor="karigarCameraInput"
-                  className="w-full min-h-[80px] flex items-center justify-center gap-3 p-4 border-2 border-dashed border-sky-200 rounded-xl text-zinc-400 cursor-pointer hover:border-gold hover:text-gold transition-all bg-white"
-                >
-                  <Camera size={26} />
-                  <span className="urdu-text text-lg">
-                    {lang === 'ur' ? 'کیمرہ' : 'Camera'}
-                  </span>
-                </label>
-              </div>
-
-              <div className="flex-1">
-                <input 
-                  type="file" 
-                  accept="image/*" 
-                  onChange={handleFileChange}
-                  className="hidden"
-                  id="karigarGalleryInput"
-                />
-                <label 
-                  htmlFor="karigarGalleryInput"
-                  className="w-full min-h-[80px] flex items-center justify-center gap-3 p-4 border-2 border-dashed border-sky-200 rounded-xl text-zinc-400 cursor-pointer hover:border-gold hover:text-gold transition-all bg-white"
-                >
-                  <ImageIcon size={26} />
-                  <span className="urdu-text text-lg">
-                    {lang === 'ur' ? 'گیلری' : 'Gallery'}
-                  </span>
-                </label>
-              </div>
-            </div>
-
-            {currentImg && (
-              <div 
-                className="relative w-full sm:w-64 h-64 rounded-xl overflow-hidden border-2 border-gold shadow-lg animate-in zoom-in-95 duration-200 cursor-pointer group" 
-                onClick={() => setLightboxData({
-                  src: currentImg,
-                  title: formData.name ? `${formData.name} - ${lang === 'ur' ? 'کاریگر تصویر' : 'Karigar Image'}` : (lang === 'ur' ? 'کاریگر تصویر' : 'Karigar Image'),
-                  phone: formData.phone,
-                  caption: `*نفیس جیولرز - کاریگر حساب*\nکاریگر: ${formData.name || '-'}\nفون: ${formData.phone || '-'}\nکام: ${formData.task || '-'}\nدیا گیا سونا: ${formData.given || 0}g\nواپسی: ${formData.rec || 0}g`
-                })}
-              >
-                <img src={currentImg} alt="Preview" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                <div className="absolute top-2 right-2 flex gap-1 z-10">
-                  <button 
-                    type="button"
-                    onClick={async (e) => { 
-                      e.stopPropagation(); 
-                      await shareImageToWhatsApp({
-                        imageSrc: currentImg,
-                        phone: formData.phone,
-                        caption: `*نفیس جیولرز - کاریگر حساب*\nکاریگر: ${formData.name || '-'}\nفون: ${formData.phone || '-'}\nکام: ${formData.task || '-'}\nدیا گیا سونا: ${formData.given || 0}g\nواپسی: ${formData.rec || 0}g`,
-                        title: `Karigar - ${formData.name}`
-                      });
-                    }}
-                    className="p-2 bg-green-600 text-white rounded-full shadow-xl hover:bg-green-700 transition-colors"
-                    title="WhatsApp Photo"
-                  >
-                    <MessageCircle size={16} />
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); setCurrentImg(null); }}
-                    className="p-2 bg-red-600 text-white rounded-full shadow-xl hover:bg-red-700 transition-colors"
-                  >
-                    <RotateCcw size={16} />
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          <ImageManager
+            image={currentImg}
+            onChange={setCurrentImg}
+            lang={lang}
+            label={t.karigarLabels.labReport}
+            phone={formData.phone}
+            title={formData.name ? `${formData.name} - ${lang === 'ur' ? 'کاریگر تصویر' : 'Karigar Image'}` : (lang === 'ur' ? 'کاریگر تصویر' : 'Karigar Image')}
+            caption={`*نفیس جیولرز - کاریگر حساب*\nکاریگر: ${formData.name || '-'}\nفون: ${formData.phone || '-'}\nکام: ${formData.task || '-'}\nدیا گیا سونا: ${formData.given || 0}g\nواپسی: ${formData.rec || 0}g`}
+            idPrefix="karigar-form-img"
+            onPreviewClick={(src) => setLightboxData({
+              src,
+              title: formData.name ? `${formData.name} - ${lang === 'ur' ? 'کاریگر تصویر' : 'Karigar Image'}` : (lang === 'ur' ? 'کاریگر تصویر' : 'Karigar Image'),
+              phone: formData.phone,
+              caption: `*نفیس جیولرز - کاریگر حساب*\nکاریگر: ${formData.name || '-'}\nفون: ${formData.phone || '-'}\nکام: ${formData.task || '-'}\nدیا گیا سونا: ${formData.given || 0}g\nواپسی: ${formData.rec || 0}g`
+            })}
+          />
         </div>
 
         <button 

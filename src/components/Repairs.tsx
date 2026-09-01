@@ -22,6 +22,7 @@ interface RepairsProps {
 }
 
 import ImageLightbox from './ImageLightbox';
+import ImageManager from './ImageManager';
 import ContactPickerModal from './ContactPickerModal';
 
 export default function Repairs({ lang }: RepairsProps) {
@@ -428,65 +429,22 @@ export default function Repairs({ lang }: RepairsProps) {
               />
             </div>
             <div className="mt-4 space-y-3">
-              <label className="text-sm font-medium text-zinc-500 mb-1 urdu-text">تصویر (کیمرہ):</label>
-              <div className="flex flex-col sm:flex-row gap-4">
-                <div className="flex-1">
-                  <input 
-                    type="file" 
-                    accept="image/*" 
-                    capture="camera"
-                    onChange={handleFileChange}
-                    className="hidden"
-                    id="repairsCameraInput"
-                  />
-                  <label 
-                    htmlFor="repairsCameraInput"
-                    className="w-full min-h-[50px] flex items-center justify-center gap-2 p-3 border-2 border-dashed border-sky-200 rounded-lg text-zinc-500 cursor-pointer hover:border-gold hover:text-gold transition-all bg-sky-50"
-                  >
-                    <Camera size={20} />
-                    <span className="urdu-text">{currentImg ? (lang === 'ur' ? 'تصویر تبدیل کریں' : 'Change Image') : t.captureImage}</span>
-                  </label>
-                </div>
-
-                {currentImg && (
-                  <div 
-                    className="relative w-full sm:w-64 h-64 rounded-xl overflow-hidden border-2 border-gold shadow-lg animate-in zoom-in-95 duration-200 cursor-pointer group" 
-                    onClick={() => setLightboxData({
-                      src: currentImg,
-                      title: formData.customerName ? `${formData.customerName} - ${formData.item || 'Repair'}` : (lang === 'ur' ? 'مرمت تصویر' : 'Repair Image'),
-                      phone: formData.customerPhone,
-                      caption: `*نفیس جیولرز - مرمت کی تفصیل*\nکسٹمر: ${formData.customerName || '-'}\nفون: ${formData.customerPhone || '-'}\nآئٹم: ${formData.item || '-'}\nمسئلہ: ${formData.issue || '-'}\nچارجز: Rs. ${(formData.charges || 0).toLocaleString()}`
-                    })}
-                  >
-                    <img src={currentImg} alt="Preview" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                    <div className="absolute top-2 right-2 flex gap-1 z-10">
-                      <button 
-                        type="button"
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          await shareImageToWhatsApp({
-                            imageSrc: currentImg,
-                            phone: formData.customerPhone,
-                            caption: `*نفیس جیولرز - مرمت کی تفصیل*\nکسٹمر: ${formData.customerName || '-'}\nفون: ${formData.customerPhone || '-'}\nآئٹم: ${formData.item || '-'}\nمسئلہ: ${formData.issue || '-'}\nچارجز: Rs. ${(formData.charges || 0).toLocaleString()}`,
-                            title: 'Repair Pic'
-                          });
-                        }}
-                        className="p-1.5 bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors shadow-md"
-                        title="WhatsApp Photo"
-                      >
-                        <MessageCircle size={14} />
-                      </button>
-                      <button 
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); setCurrentImg(null); }}
-                        className="p-1.5 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors shadow-md"
-                      >
-                        <RotateCcw size={16} />
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <ImageManager
+                image={currentImg}
+                onChange={setCurrentImg}
+                lang={lang}
+                label={lang === 'ur' ? 'مرمت کی تصویر:' : 'Repair Photo:'}
+                phone={formData.customerPhone}
+                title={formData.customerName ? `${formData.customerName} - ${formData.item || 'Repair'}` : (lang === 'ur' ? 'مرمت تصویر' : 'Repair Image')}
+                caption={`*نفیس جیولرز - مرمت کی تفصیل*\nکسٹمر: ${formData.customerName || '-'}\nفون: ${formData.customerPhone || '-'}\nآئٹم: ${formData.item || '-'}\nمسئلہ: ${formData.issue || '-'}\nچارجز: Rs. ${(formData.charges || 0).toLocaleString()}`}
+                idPrefix="repairs-form-img"
+                onPreviewClick={(src) => setLightboxData({
+                  src,
+                  title: formData.customerName ? `${formData.customerName} - ${formData.item || 'Repair'}` : (lang === 'ur' ? 'مرمت تصویر' : 'Repair Image'),
+                  phone: formData.customerPhone,
+                  caption: `*نفیس جیولرز - مرمت کی تفصیل*\nکسٹمر: ${formData.customerName || '-'}\nفون: ${formData.customerPhone || '-'}\nآئٹم: ${formData.item || '-'}\nمسئلہ: ${formData.issue || '-'}\nچارجز: Rs. ${(formData.charges || 0).toLocaleString()}`
+                })}
+              />
             </div>
             <div className="flex gap-2 pt-6">
               <button 

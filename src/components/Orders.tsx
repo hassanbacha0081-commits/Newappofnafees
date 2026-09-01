@@ -23,6 +23,7 @@ interface OrdersProps {
 }
 
 import ImageLightbox from './ImageLightbox';
+import ImageManager from './ImageManager';
 import ContactPickerModal from './ContactPickerModal';
 
 export default function Orders({ lang }: OrdersProps) {
@@ -769,75 +770,22 @@ export default function Orders({ lang }: OrdersProps) {
 
             {/* Picture Upload / Camera Capture in sequence, spanning 2 cols */}
             <div className="col-span-1 md:col-span-2 space-y-1 mt-2">
-              <label className="text-xs text-zinc-500 urdu-text font-bold">{lang === 'ur' ? 'آرڈر کی تصویر (Order Pic):' : 'Order Pic:'}</label>
-              {currentImg ? (
-                <div className="relative group cursor-pointer max-w-sm mx-auto" onClick={() => setLightboxData({
-                  src: currentImg,
+              <ImageManager
+                image={currentImg}
+                onChange={setCurrentImg}
+                lang={lang}
+                label={lang === 'ur' ? 'آرڈر کی تصویر (Order Pic):' : 'Order Pic:'}
+                phone={formData.phone}
+                title={formData.name ? `${formData.name} - ${formData.item || 'Order'}` : (lang === 'ur' ? 'آرڈر تصویر' : 'Order Image')}
+                caption={`*نفیس جیولرز - نیا آرڈر ڈیزائن*\nکسٹمر: ${formData.name || '-'}\nفون: ${formData.phone || '-'}\nآئٹم: ${formData.item || '-'}\nکل رقم: Rs. ${(formData.total || 0).toLocaleString()}`}
+                idPrefix="orders-form-img"
+                onPreviewClick={(src) => setLightboxData({
+                  src,
                   title: formData.name ? `${formData.name} - ${formData.item || 'Order'}` : (lang === 'ur' ? 'آرڈر تصویر' : 'Order Image'),
                   phone: formData.phone,
                   caption: `*نفیس جیولرز - نیا آرڈر ڈیزائن*\nکسٹمر: ${formData.name || '-'}\nفون: ${formData.phone || '-'}\nآئٹم: ${formData.item || '-'}\nکل رقم: Rs. ${(formData.total || 0).toLocaleString()}`
-                })}>
-                  <img src={currentImg} alt="Preview" className="w-full h-52 object-contain border border-sky-200 rounded-lg group-hover:opacity-95 transition-opacity" />
-                  <div className="absolute top-2 right-2 flex gap-1 z-10">
-                    <button 
-                      type="button"
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        await shareImageToWhatsApp({
-                          imageSrc: currentImg,
-                          phone: formData.phone,
-                          caption: `*نفیس جیولرز - نیا آرڈر ڈیزائن*\nکسٹمر: ${formData.name || '-'}\nفون: ${formData.phone || '-'}\nآئٹم: ${formData.item || '-'}\nکل رقم: Rs. ${(formData.total || 0).toLocaleString()}`,
-                          title: 'Order Design Pic'
-                        });
-                      }}
-                      className="p-1.5 bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors shadow-md"
-                      title="WhatsApp Photo"
-                    >
-                      <MessageCircle size={14} />
-                    </button>
-                    <button 
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); setCurrentImg(null); }}
-                      className="p-1.5 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors shadow-md"
-                    >
-                      <RotateCcw size={14} />
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="max-w-sm mx-auto flex gap-2">
-                  <input 
-                    type="file" 
-                    accept="image/*" 
-                    capture="environment"
-                    onChange={handleFileChange}
-                    className="hidden"
-                    id="ordersCameraInput"
-                  />
-                  <label 
-                    htmlFor="ordersCameraInput"
-                    className="flex-1 p-3 border-2 border-dashed border-sky-200 rounded-lg text-zinc-500 flex items-center justify-center gap-2 cursor-pointer hover:border-gold hover:text-gold transition-all"
-                  >
-                    <Camera size={18} />
-                    <span className="urdu-text text-sm">{lang === 'ur' ? 'کیمرہ' : 'Camera'}</span>
-                  </label>
-
-                  <input 
-                    type="file" 
-                    accept="image/*" 
-                    onChange={handleFileChange}
-                    className="hidden"
-                    id="ordersGalleryInput"
-                  />
-                  <label 
-                    htmlFor="ordersGalleryInput"
-                    className="flex-1 p-3 border-2 border-dashed border-sky-200 rounded-lg text-zinc-500 flex items-center justify-center gap-2 cursor-pointer hover:border-gold hover:text-gold transition-all"
-                  >
-                    <ImageIcon size={18} />
-                    <span className="urdu-text text-sm">{lang === 'ur' ? 'گیلری' : 'Gallery'}</span>
-                  </label>
-                </div>
-              )}
+                })}
+              />
             </div>
 
             <div className="space-y-1">

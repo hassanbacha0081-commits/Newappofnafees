@@ -40,7 +40,6 @@ import Expenses from './components/Expenses';
 import Khaata from './components/Khaata';
 import NotificationsCenter from './components/NotificationsCenter';
 import { NotificationBell } from './components/NotificationBell';
-import SyncStatusIndicator from './components/SyncStatusIndicator';
 import { UrgentAlertBanner } from './components/UrgentAlertBanner';
 import { getPaletteStyles } from './lib/colors';
 
@@ -499,7 +498,7 @@ export default function App() {
         </nav>
         <div className="p-4 border-t border-sky-500 bg-sky-700/50 space-y-2">
           <div className="w-full flex items-center justify-between gap-2">
-            <SyncStatusIndicator lang={lang} onOpenSettings={() => setActiveSection('settings')} />
+            
             <NotificationBell onClick={() => setIsNotificationsOpen(true)} lang={lang} />
           </div>
           <button
@@ -542,7 +541,7 @@ export default function App() {
           </div>
         </div>
         <div className="flex items-center gap-1.5">
-          <SyncStatusIndicator lang={lang} onOpenSettings={() => setActiveSection('settings')} />
+          
           <NotificationBell onClick={() => setIsNotificationsOpen(true)} lang={lang} />
           <button onClick={() => setLang(lang === 'ur' ? 'en' : 'ur')} className="p-2 text-sky-100 hover:text-white">
             <Languages size={24} />

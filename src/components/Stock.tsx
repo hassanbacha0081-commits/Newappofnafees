@@ -20,6 +20,7 @@ interface StockProps {
 }
 
 import ImageLightbox from './ImageLightbox';
+import ImageManager from './ImageManager';
 
 export default function Stock({ lang }: StockProps) {
   const t = translations[lang];
@@ -430,60 +431,20 @@ export default function Stock({ lang }: StockProps) {
               </div>
             </div>
             <div className="mt-4 space-y-2">
-              {currentImg ? (
-                <div 
-                  className="relative group cursor-pointer" 
-                  onClick={() => setLightboxData({
-                    src: currentImg,
-                    title: formData.name || (lang === 'ur' ? 'سٹاک تصویر' : 'Stock Image'),
-                    caption: `*نفیس جیولرز - نیا اسٹاک*\nآئٹم کا نام: ${formData.name || '-'}\nقسم: ${formData.type || 'Gold'}\nمقدار: ${formData.quantity || 0}${formData.unit === 'pcs' ? ' عدد' : 'g'}`
-                  })}
-                >
-                  <img src={currentImg} alt="Preview" className="w-full h-64 object-contain border border-sky-200 rounded-lg group-hover:opacity-95 transition-opacity" />
-                  <div className="absolute top-2 right-2 flex gap-1 z-10">
-                    <button 
-                      type="button"
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        await shareImageToWhatsApp({
-                          imageSrc: currentImg,
-                          caption: `*نفیس جیولرز - نیا اسٹاک*\nآئٹم کا نام: ${formData.name || '-'}\nقسم: ${formData.type || 'Gold'}\nمقدار: ${formData.quantity || 0}${formData.unit === 'pcs' ? ' عدد' : 'g'}`,
-                          title: 'Stock Item Pic'
-                        });
-                      }}
-                      className="p-1.5 bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors shadow-md"
-                      title="WhatsApp Photo"
-                    >
-                      <MessageCircle size={14} />
-                    </button>
-                    <button 
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); setCurrentImg(null); }}
-                      className="p-1.5 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors shadow-md"
-                    >
-                      <RotateCcw size={14} />
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <input 
-                    type="file" 
-                    accept="image/*" 
-                    capture="camera"
-                    onChange={handleFileChange}
-                    className="hidden"
-                    id="stockCameraInput"
-                  />
-                  <label 
-                    htmlFor="stockCameraInput"
-                    className="w-full p-3 border-2 border-dashed border-sky-200 rounded-lg text-zinc-500 flex items-center justify-center gap-2 cursor-pointer hover:border-gold hover:text-gold transition-all"
-                  >
-                    <Camera size={20} />
-                    <span className="urdu-text">{t.captureImage}</span>
-                  </label>
-                </>
-              )}
+              <ImageManager
+                image={currentImg}
+                onChange={setCurrentImg}
+                lang={lang}
+                label={t.captureImage}
+                title={formData.name || (lang === 'ur' ? 'سٹاک تصویر' : 'Stock Image')}
+                caption={`*نفیس جیولرز - نیا اسٹاک*\nآئٹم کا نام: ${formData.name || '-'}\nقسم: ${formData.type || 'Gold'}\nمقدار: ${formData.quantity || 0}${formData.unit === 'pcs' ? ' عدد' : 'g'}`}
+                idPrefix="stock-form-img"
+                onPreviewClick={(src) => setLightboxData({
+                  src,
+                  title: formData.name || (lang === 'ur' ? 'سٹاک تصویر' : 'Stock Image'),
+                  caption: `*نفیس جیولرز - نیا اسٹاک*\nآئٹم کا نام: ${formData.name || '-'}\nقسم: ${formData.type || 'Gold'}\nمقدار: ${formData.quantity || 0}${formData.unit === 'pcs' ? ' عدد' : 'g'}`
+                })}
+              />
             </div>
             <div className="flex gap-2 pt-6">
               <button 

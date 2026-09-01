@@ -20,6 +20,7 @@ interface BillingProps {
 }
 
 import ImageLightbox from './ImageLightbox';
+import ImageManager from './ImageManager';
 import ContactPickerModal from './ContactPickerModal';
 
 export default function Billing({ lang, editingSale, setEditingSale }: BillingProps) {
@@ -662,88 +663,26 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
             </div>
 
             <div className="space-y-6 pt-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:gap-6">
-                <div className="flex-1 space-y-3">
-                  <input
-                    ref={cameraInputRef}
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={handleFileChange}
-                    className="hidden"
-                    id="item-camera"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => cameraInputRef.current?.click()}
-                    className="w-full flex items-center justify-center gap-3 px-6 py-4 rounded-xl border border-sky-200 text-sky-600 hover:border-gold hover:bg-gold/5 transition-all cursor-pointer bg-sky-50 font-bold urdu-text"
-                  >
-                    <Camera size={20} />
-                    <span>{lang === 'ur' ? 'کیمرہ سے تصویر' : 'Camera'}</span>
-                  </button>
-                  
-                  <input
-                    ref={galleryInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileChange}
-                    className="hidden"
-                    id="item-gallery"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => galleryInputRef.current?.click()}
-                    className="w-full flex items-center justify-center gap-3 px-6 py-4 rounded-xl border border-sky-200 text-sky-600 hover:border-gold hover:bg-gold/5 transition-all cursor-pointer bg-sky-50 font-bold urdu-text"
-                  >
-                    <ImageIcon size={20} />
-                    <span>{lang === 'ur' ? 'گیلری سے تصویر' : 'Gallery'}</span>
-                  </button>
-                </div>
-
-                {lastImg && (
-                  <div 
-                    className="relative w-full sm:w-40 h-40 rounded-3xl overflow-hidden border border-sky-200 shadow-xl animate-in zoom-in-95 duration-500 group cursor-pointer" 
-                    onClick={() => setLightboxData({
-                      src: lastImg,
-                      title: formData.iName || (lang === 'ur' ? 'بل آئٹم تصویر' : 'Invoice Item Image'),
-                      phone: formData.cPhone,
-                      caption: `*نفیس جیولرز - بل آئٹم*\nکسٹمر: ${formData.cName || '-'}\nآئٹم: ${formData.iName || '-'}\nوزن: ${formData.iWt || 0}g`
-                    })}
-                  >
-                    <img src={lastImg} alt="Preview" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-                    <div className="absolute top-3 right-3 flex gap-1 z-10">
-                      <button 
-                        type="button"
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          await shareImageToWhatsApp({
-                            imageSrc: lastImg,
-                            phone: formData.cPhone,
-                            caption: `*نفیس جیولرز - بل آئٹم*\nکسٹمر: ${formData.cName || '-'}\nآئٹم: ${formData.iName || '-'}\nوزن: ${formData.iWt || 0}g`,
-                            title: 'Invoice Item Pic'
-                          });
-                        }}
-                        className="p-1.5 bg-green-600 text-white rounded-xl shadow-lg hover:bg-green-700 transition-colors"
-                        title="WhatsApp Photo"
-                      >
-                        <MessageCircle size={15} />
-                      </button>
-                      <button 
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); setLastImg(null); }}
-                        className="p-1.5 bg-red-600 text-white rounded-xl shadow-lg hover:bg-red-700 transition-colors"
-                      >
-                        <X size={15} />
-                      </button>
-                    </div>
-                    <div className="absolute inset-0 bg-sky-900/10 group-hover:bg-transparent transition-colors"></div>
-                  </div>
-                )}
-              </div>
+              <ImageManager
+                image={lastImg}
+                onChange={setLastImg}
+                lang={lang}
+                label={lang === 'ur' ? 'آئٹم کی تصویر:' : 'Item Picture:'}
+                phone={formData.cPhone}
+                title={formData.iName || (lang === 'ur' ? 'بل آئٹم تصویر' : 'Invoice Item Image')}
+                caption={`*نفیس جیولرز - بل آئٹم*\nکسٹمر: ${formData.cName || '-'}\nآئٹم: ${formData.iName || '-'}\nوزن: ${formData.iWt || 0}g`}
+                idPrefix="billing-item-img"
+                onPreviewClick={(src) => setLightboxData({
+                  src,
+                  title: formData.iName || (lang === 'ur' ? 'بل آئٹم تصویر' : 'Invoice Item Image'),
+                  phone: formData.cPhone,
+                  caption: `*نفیس جیولرز - بل آئٹم*\nکسٹمر: ${formData.cName || '-'}\nآئٹم: ${formData.iName || '-'}\nوزن: ${formData.iWt || 0}g`
+                })}
+              />
               
               <button
                 onClick={addItem}
-                className="w-full flex items-center justify-center gap-3 px-8 py-5 bg-sky-600 text-white rounded-2xl hover:bg-sky-700 transition-all shadow-xl shadow-sky-200 hover:-translate-y-1 active:translate-y-0"
+                className="w-full flex items-center justify-center gap-3 px-8 py-5 bg-sky-600 text-white rounded-2xl hover:bg-sky-700 transition-all shadow-xl shadow-sky-200 hover:-translate-y-1 active:translate-y-0 cursor-pointer"
               >
                 <Plus size={24} className="text-gold" />
                 <span className="font-bold urdu-text text-xl">{t.addItem}</span>
@@ -804,9 +743,25 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
                       <div className="flex-1 min-w-0">
                         <div className="flex justify-between items-start">
                           <h4 className="font-bold text-zinc-900 text-sm urdu-text line-clamp-1 truncate pr-2">{item.n}</h4>
-                          <button onClick={() => removeItem(idx)} className="text-zinc-300 hover:text-red-500 transition-colors p-1">
-                            <Trash2 size={16} />
-                          </button>
+                          <div className="flex items-center gap-1">
+                            {item.img && (
+                              <button 
+                                type="button"
+                                onClick={() => {
+                                  const updated = [...billItems];
+                                  updated[idx] = { ...updated[idx], img: undefined };
+                                  setBillItems(updated);
+                                }} 
+                                className="text-zinc-300 hover:text-red-500 transition-colors p-1"
+                                title={lang === 'ur' ? 'تصویر ہٹائیں' : 'Remove Image'}
+                              >
+                                <ImageIcon size={14} className="text-red-400" />
+                              </button>
+                            )}
+                            <button onClick={() => removeItem(idx)} className="text-zinc-300 hover:text-red-500 transition-colors p-1" title={lang === 'ur' ? 'حذف کریں' : 'Delete Item'}>
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
                         </div>
                         <div className="flex justify-between items-center mt-2">
                           <span className="text-[10px] font-mono font-bold text-zinc-500 bg-white px-2 py-0.5 rounded border border-sky-100">{item.w}g @ {item.r.toLocaleString()}</span>

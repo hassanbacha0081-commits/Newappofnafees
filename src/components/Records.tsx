@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Sale, type GoldPurchase } from '../db';
 import { translations, type Language } from '../translations';
-import { Search, Printer, Trash2, Edit, MessageCircle, X, AlertTriangle, History, Download, AlertCircle, ShoppingCart, Tag, Eye, Check, Clock, ImageIcon } from 'lucide-react';
+import { Search, Printer, Trash2, Edit, MessageCircle, X, AlertTriangle, History, Download, AlertCircle, ShoppingCart, Tag, Eye, Check, Clock, ImageIcon, Camera } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatWhatsAppUrl, shareImageToWhatsApp } from '../lib/utils';
 import { useReactToPrint } from 'react-to-print';
@@ -18,6 +18,7 @@ import { Printer as CapPrinter } from '@capgo/capacitor-printer';
 import { APP_CONFIG } from '../config';
 
 import ImageLightbox from './ImageLightbox';
+import ImageManager from './ImageManager';
 
 interface RecordsProps {
   lang: Language;
@@ -34,11 +35,56 @@ export default function Records({ lang, setActiveSection, setEditingSale }: Reco
 
   const [printData, setPrintData] = useState<{ data: Sale | GoldPurchase, id: number, type: 'sale' | 'purchase' } | null>(null);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
-  const [lightboxData, setLightboxData] = useState<{ src: string; title?: string; phone?: string; caption?: string } | null>(null);
+  const [lightboxData, setLightboxData] = useState<{ src: string; title?: string; phone?: string; caption?: string; onUpdate?: () => void; onDelete?: () => void } | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<{ id: number, type: 'sale' | 'purchase' } | null>(null);
+  const [editingImageItem, setEditingImageItem] = useState<{
+    type: 'saleItem';
+    saleId: number;
+    itemIndex: number;
+    itemName: string;
+    customerName: string;
+    phone: string;
+    image: string | null;
+  } | {
+    type: 'purchase';
+    purchaseId: number;
+    name: string;
+    phone: string;
+    image: string | null;
+  } | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
+
+  const handleUpdateSaleItemImage = async (saleId: number, itemIndex: number, newImg: string | null) => {
+    try {
+      const sale = await db.sales.get(saleId);
+      if (!sale) return;
+      const updatedItems = [...sale.items];
+      if (updatedItems[itemIndex]) {
+        updatedItems[itemIndex] = { ...updatedItems[itemIndex], img: newImg };
+        await db.sales.update(saleId, { items: updatedItems, _updatedAt: Date.now() });
+        if (editingImageItem && editingImageItem.type === 'saleItem' && editingImageItem.saleId === saleId && editingImageItem.itemIndex === itemIndex) {
+          setEditingImageItem({ ...editingImageItem, image: newImg });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to update sale item image:', err);
+      alert(isUrdu ? 'تصویر اپ ڈیٹ کرنے میں خرابی ہوئی' : 'Failed to update image');
+    }
+  };
+
+  const handleUpdatePurchaseImage = async (purchaseId: number, newImg: string | null) => {
+    try {
+      await db.goldPurchases.update(purchaseId, { img: newImg, _updatedAt: Date.now() });
+      if (editingImageItem && editingImageItem.type === 'purchase' && editingImageItem.purchaseId === purchaseId) {
+        setEditingImageItem({ ...editingImageItem, image: newImg });
+      }
+    } catch (err) {
+      console.error('Failed to update purchase image:', err);
+      alert(isUrdu ? 'تصویر اپ ڈیٹ کرنے میں خرابی ہوئی' : 'Failed to update image');
+    }
+  };
 
   const handlePrint = useReactToPrint({
     contentRef: printRef,
@@ -584,13 +630,18 @@ export default function Records({ lang, setActiveSection, setEditingSale }: Reco
                   {/* Items List inside the Record Card */}
                   {sale.items && sale.items.length > 0 && (
                     <div className="border-t border-sky-100 pt-3 mt-1 space-y-2">
-                      <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider urdu-text">
-                        {lang === 'ur' ? 'اشیاء کی تفصیل:' : 'Items Details:'}
-                      </p>
-                      <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider urdu-text">
+                          {lang === 'ur' ? 'اشیاء کی تفصیل اور تصاویر:' : 'Items Details & Images:'}
+                        </p>
+                        <span className="text-[10px] text-sky-600 font-bold bg-sky-50 px-2 py-0.5 rounded-full border border-sky-100 urdu-text">
+                          {sale.items.filter(i => i.img).length} / {sale.items.length} {lang === 'ur' ? 'تصاویر' : 'Pics'}
+                        </span>
+                      </div>
+                      <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                         {sale.items.map((item, idx) => (
-                          <div key={idx} className="flex items-center justify-between p-2 bg-zinc-50 rounded-xl border border-zinc-100 text-xs">
-                            <div className="flex items-center gap-2 overflow-hidden">
+                          <div key={idx} className="flex items-center justify-between p-2.5 bg-zinc-50 hover:bg-sky-50/40 rounded-xl border border-zinc-100 text-xs transition-colors">
+                            <div className="flex items-center gap-2.5 overflow-hidden">
                               {item.img ? (
                                 <div className="relative group/recimg flex-shrink-0">
                                   <div 
@@ -598,12 +649,33 @@ export default function Records({ lang, setActiveSection, setEditingSale }: Reco
                                       src: item.img!,
                                       title: `${item.n} - ${sale.name} (#${sale.id})`,
                                       phone: sale.phone,
-                                      caption: `*نفیس جیولرز - سیل ریکارڈ*\nبل نمبر: #${sale.id}\nگاہک: ${sale.name}\nآئٹم: ${item.n}\nوزن: ${item.w}g\nقیمت: Rs. ${item.t.toLocaleString()}\nتاریخ: ${sale.date}`
+                                      caption: `*نفیس جیولرز - سیل ریکارڈ*\nبل نمبر: #${sale.id}\nگاہک: ${sale.name}\nآئٹم: ${item.n}\nوزن: ${item.w}g\nقیمت: Rs. ${item.t.toLocaleString()}\nتاریخ: ${sale.date}`,
+                                      onUpdate: () => {
+                                        setLightboxData(null);
+                                        setEditingImageItem({
+                                          type: 'saleItem',
+                                          saleId: sale.id!,
+                                          itemIndex: idx,
+                                          itemName: item.n,
+                                          customerName: sale.name,
+                                          phone: sale.phone,
+                                          image: item.img || null
+                                        });
+                                      },
+                                      onDelete: async () => {
+                                        if (confirm(lang === 'ur' ? 'کیا آپ واقعی یہ تصویر حذف کرنا چاہتے ہیں؟' : 'Are you sure you want to delete this image?')) {
+                                          await handleUpdateSaleItemImage(sale.id!, idx, null);
+                                          setLightboxData(null);
+                                        }
+                                      }
                                     })}
-                                    className="w-10 h-10 rounded-lg overflow-hidden border border-zinc-200 shadow-sm cursor-pointer hover:border-gold transition-colors"
-                                    title={lang === 'ur' ? 'تصویر دیکھیں' : 'View Image'}
+                                    className="w-12 h-12 rounded-xl overflow-hidden border-2 border-zinc-200 shadow-xs cursor-pointer hover:border-gold transition-colors relative"
+                                    title={lang === 'ur' ? 'بڑی تصویر دیکھیں' : 'View Full Image'}
                                   >
-                                    <img src={item.img} alt={item.n} className="w-full h-full object-cover" />
+                                    <img src={item.img} alt={item.n} className="w-full h-full object-cover group-hover/recimg:scale-110 transition-transform duration-300" />
+                                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/recimg:opacity-100 flex items-center justify-center transition-opacity text-white">
+                                      <Eye size={14} />
+                                    </div>
                                   </div>
                                   <button
                                     type="button"
@@ -623,19 +695,68 @@ export default function Records({ lang, setActiveSection, setEditingSale }: Reco
                                   </button>
                                 </div>
                               ) : (
-                                <div className="w-10 h-10 rounded-lg bg-zinc-100 border border-zinc-200 flex items-center justify-center flex-shrink-0 text-[10px] text-zinc-400 font-bold font-nastaliq">
-                                  -
-                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingImageItem({
+                                    type: 'saleItem',
+                                    saleId: sale.id!,
+                                    itemIndex: idx,
+                                    itemName: item.n,
+                                    customerName: sale.name,
+                                    phone: sale.phone,
+                                    image: null
+                                  })}
+                                  className="w-12 h-12 rounded-xl bg-sky-50 border-2 border-dashed border-sky-300 hover:border-gold hover:bg-gold/10 flex flex-col items-center justify-center flex-shrink-0 text-sky-600 transition-colors cursor-pointer"
+                                  title={lang === 'ur' ? 'تصویر شامل کریں' : 'Add Image'}
+                                >
+                                  <Camera size={16} />
+                                  <span className="text-[9px] font-bold mt-0.5 urdu-text">{lang === 'ur' ? '+ تصویر' : '+ Pic'}</span>
+                                </button>
                               )}
                               <div className="truncate">
-                                <p className="font-bold text-zinc-800 truncate urdu-text">{item.n}</p>
-                                <p className="text-[10px] text-zinc-400 font-mono">
+                                <p className="font-bold text-zinc-800 truncate urdu-text text-sm">{item.n}</p>
+                                <p className="text-[10px] text-zinc-500 font-mono">
                                   {item.w}g | {item.p || 1} Qty
                                 </p>
                               </div>
                             </div>
-                            <div className="text-right flex-shrink-0">
-                              <p className="font-bold text-gold-dark font-mono">Rs. {item.t.toLocaleString()}</p>
+                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                              <p className="font-bold text-gold-dark font-mono text-xs mr-1">Rs. {item.t.toLocaleString()}</p>
+                              
+                              {/* Dedicated Update/Change Image Button */}
+                              <button
+                                type="button"
+                                onClick={() => setEditingImageItem({
+                                  type: 'saleItem',
+                                  saleId: sale.id!,
+                                  itemIndex: idx,
+                                  itemName: item.n,
+                                  customerName: sale.name,
+                                  phone: sale.phone,
+                                  image: item.img || null
+                                })}
+                                className="px-2 py-1 bg-sky-100 hover:bg-sky-600 hover:text-white text-sky-800 rounded-lg text-xs font-bold urdu-text flex items-center gap-1 transition-colors border border-sky-200 cursor-pointer shadow-xs"
+                                title={item.img ? (lang === 'ur' ? 'تصویر تبدیل / اپ ڈیٹ کریں' : 'Update/Change Image') : (lang === 'ur' ? 'تصویر شامل کریں' : 'Add Image')}
+                              >
+                                <Camera size={13} />
+                                <span>{item.img ? (lang === 'ur' ? 'تصویر بدلیں' : 'Update') : (lang === 'ur' ? '+ تصویر' : '+ Pic')}</span>
+                              </button>
+
+                              {/* Delete Image Button (if image exists) */}
+                              {item.img && (
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    if (confirm(lang === 'ur' ? 'کیا آپ اس آئٹم کی تصویر حذف کرنا چاہتے ہیں؟' : 'Delete image for this item?')) {
+                                      await handleUpdateSaleItemImage(sale.id!, idx, null);
+                                    }
+                                  }}
+                                  className="p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 rounded-lg transition-colors border border-red-200 cursor-pointer"
+                                  title={lang === 'ur' ? 'تصویر حذف کریں' : 'Delete Image'}
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -651,12 +772,12 @@ export default function Records({ lang, setActiveSection, setEditingSale }: Reco
                           setShowPrintPreview(true);
                           setTimeout(async () => {
                             const url = await generatePDF(sale, sale.id!, 'sale');
-                      if (url) {
-                        setPdfUrl(url);
-                      } else {
-                        setShowPrintPreview(false);
-                        alert('PDF generation failed. Please try again or check the image format.');
-                      }
+                            if (url) {
+                              setPdfUrl(url);
+                            } else {
+                              setShowPrintPreview(false);
+                              alert('PDF generation failed. Please try again or check the image format.');
+                            }
                           }, 400);
                         }
                       }}
@@ -665,16 +786,59 @@ export default function Records({ lang, setActiveSection, setEditingSale }: Reco
                       <Printer size={16} />
                       <span className="text-xs font-bold urdu-text">{t.print}</span>
                     </button>
+                    {/* Image Manager Quick Button for this Sale */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (sale.items && sale.items.length > 0) {
+                          const firstWithImg = sale.items.find(i => i.img);
+                          const targetIdx = firstWithImg ? sale.items.indexOf(firstWithImg) : 0;
+                          const targetItem = sale.items[targetIdx];
+                          setEditingImageItem({
+                            type: 'saleItem',
+                            saleId: sale.id!,
+                            itemIndex: targetIdx,
+                            itemName: targetItem.n,
+                            customerName: sale.name,
+                            phone: sale.phone,
+                            image: targetItem.img || null
+                          });
+                        }
+                      }}
+                      className="p-2 bg-sky-50 text-sky-600 hover:bg-sky-600 hover:text-white rounded-lg transition-colors border border-sky-200"
+                      title={lang === 'ur' ? 'تصویر تبدیل / شامل کریں' : 'Update / Add Image'}
+                    >
+                      <Camera size={16} />
+                    </button>
                     {sale.items.some(i => i.img) && (
                       <button
                         onClick={() => {
                           const firstImgItem = sale.items.find(i => i.img);
+                          const firstImgIdx = firstImgItem ? sale.items.indexOf(firstImgItem) : 0;
                           if (firstImgItem?.img) {
                             setLightboxData({
                               src: firstImgItem.img,
                               title: `${firstImgItem.n} - ${sale.name} (#${sale.id})`,
                               phone: sale.phone,
-                              caption: `*نفیس جیولرز - سیل ریکارڈ*\nبل نمبر: #${sale.id}\nگاہک: ${sale.name}\nفون: ${sale.phone || '-'}\nکل رقم: Rs. ${sale.total.toLocaleString()}\nوصول: Rs. ${sale.rec.toLocaleString()}\nبقایا: Rs. ${sale.rem.toLocaleString()}`
+                              caption: `*نفیس جیولرز - سیل ریکارڈ*\nبل نمبر: #${sale.id}\nگاہک: ${sale.name}\nفون: ${sale.phone || '-'}\nکل رقم: Rs. ${sale.total.toLocaleString()}\nوصول: Rs. ${sale.rec.toLocaleString()}\nبقایا: Rs. ${sale.rem.toLocaleString()}`,
+                              onUpdate: () => {
+                                setLightboxData(null);
+                                setEditingImageItem({
+                                  type: 'saleItem',
+                                  saleId: sale.id!,
+                                  itemIndex: firstImgIdx,
+                                  itemName: firstImgItem.n,
+                                  customerName: sale.name,
+                                  phone: sale.phone,
+                                  image: firstImgItem.img || null
+                                });
+                              },
+                              onDelete: async () => {
+                                if (confirm(lang === 'ur' ? 'کیا آپ واقعی تصویر حذف کرنا چاہتے ہیں؟' : 'Delete image?')) {
+                                  await handleUpdateSaleItemImage(sale.id!, firstImgIdx, null);
+                                  setLightboxData(null);
+                                }
+                              }
                             });
                           }
                         }}
@@ -775,14 +939,121 @@ export default function Records({ lang, setActiveSection, setEditingSale }: Reco
                     </div>
                   </div>
 
-                    <div className="flex items-center gap-2 pt-2">
+                  {/* Purchase Image Section in Card Body */}
+                  <div className="border-t border-sky-100 pt-3">
+                    {p.img ? (
+                      <div className="flex items-center justify-between p-2 bg-sky-50/60 rounded-xl border border-sky-100">
+                        <div className="flex items-center gap-2.5">
+                          <div 
+                            onClick={() => setLightboxData({
+                              src: p.img!,
+                              title: `${p.name} (#${p.id}) - ${lang === 'ur' ? 'خریداری' : 'Purchase'}`,
+                              phone: p.phone,
+                              caption: `*نفیس جیولرز - سونا خریداری رسید*\nرسید نمبر: #${p.id}\nبیچنے والے کا نام: ${p.name}\nفون: ${p.phone || '-'}\nوزن: ${p.weight}g\nریٹ: Rs. ${p.rate.toLocaleString()}\nکل رقم: Rs. ${p.total.toLocaleString()}\nتاریخ: ${p.date}`,
+                              onUpdate: () => {
+                                setLightboxData(null);
+                                setEditingImageItem({
+                                  type: 'purchase',
+                                  purchaseId: p.id!,
+                                  name: p.name,
+                                  phone: p.phone,
+                                  image: p.img || null
+                                });
+                              },
+                              onDelete: async () => {
+                                if (confirm(lang === 'ur' ? 'کیا آپ واقعی خریداری تصویر حذف کرنا چاہتے ہیں؟' : 'Delete purchase image?')) {
+                                  await handleUpdatePurchaseImage(p.id!, null);
+                                  setLightboxData(null);
+                                }
+                              }
+                            })}
+                            className="w-14 h-14 rounded-xl overflow-hidden border-2 border-sky-200 shadow-xs cursor-pointer hover:border-gold transition-colors relative group"
+                            title={lang === 'ur' ? 'بڑی تصویر دیکھیں' : 'View Full Image'}
+                          >
+                            <img src={p.img} alt={p.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
+                            <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
+                              <Eye size={14} />
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold text-sky-900 urdu-text block">{lang === 'ur' ? 'خریداری تصویر' : 'Purchase Picture'}</span>
+                            <span className="text-[10px] text-zinc-400 font-mono">1 Attachment</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setEditingImageItem({
+                              type: 'purchase',
+                              purchaseId: p.id!,
+                              name: p.name,
+                              phone: p.phone,
+                              image: p.img || null
+                            })}
+                            className="px-2.5 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold urdu-text flex items-center gap-1 transition-colors shadow-xs cursor-pointer"
+                            title={lang === 'ur' ? 'تصویر تبدیل / اپ ڈیٹ کریں' : 'Change/Update Image'}
+                          >
+                            <Camera size={13} />
+                            <span>{lang === 'ur' ? 'تبدیل کریں' : 'Update'}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (confirm(lang === 'ur' ? 'کیا آپ واقعی یہ تصویر حذف کرنا چاہتے ہیں؟' : 'Delete image?')) {
+                                await handleUpdatePurchaseImage(p.id!, null);
+                              }
+                            }}
+                            className="p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 rounded-lg transition-colors border border-red-200 cursor-pointer"
+                            title={lang === 'ur' ? 'تصویر حذف کریں' : 'Delete Image'}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setEditingImageItem({
+                          type: 'purchase',
+                          purchaseId: p.id!,
+                          name: p.name,
+                          phone: p.phone,
+                          image: null
+                        })}
+                        className="w-full py-2.5 px-3 bg-sky-50 hover:bg-gold/10 hover:border-gold border-2 border-dashed border-sky-200 rounded-xl text-sky-700 text-xs font-bold urdu-text flex items-center justify-center gap-2 transition-all cursor-pointer"
+                        title={lang === 'ur' ? 'تصویر شامل کریں' : 'Add Image'}
+                      >
+                        <Camera size={15} className="text-sky-600" />
+                        <span>{lang === 'ur' ? '+ سونا / زیورات کی تصویر شامل کریں' : '+ Add Gold / Jewellery Picture'}</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-2">
                     {p.img && (
                       <button
                         onClick={() => setLightboxData({
                           src: p.img!,
                           title: `${p.name} (#${p.id}) - ${lang === 'ur' ? 'خریداری' : 'Purchase'}`,
                           phone: p.phone,
-                          caption: `*نفیس جیولرز - سونا خریداری رسید*\nرسید نمبر: #${p.id}\nبیچنے والے کا نام: ${p.name}\nفون: ${p.phone || '-'}\nوزن: ${p.weight}g\nریٹ: Rs. ${p.rate.toLocaleString()}\nکل رقم: Rs. ${p.total.toLocaleString()}\nتاریخ: ${p.date}`
+                          caption: `*نفیس جیولرز - سونا خریداری رسید*\nرسید نمبر: #${p.id}\nبیچنے والے کا نام: ${p.name}\nفون: ${p.phone || '-'}\nوزن: ${p.weight}g\nریٹ: Rs. ${p.rate.toLocaleString()}\nکل رقم: Rs. ${p.total.toLocaleString()}\nتاریخ: ${p.date}`,
+                          onUpdate: () => {
+                            setLightboxData(null);
+                            setEditingImageItem({
+                              type: 'purchase',
+                              purchaseId: p.id!,
+                              name: p.name,
+                              phone: p.phone,
+                              image: p.img || null
+                            });
+                          },
+                          onDelete: async () => {
+                            if (confirm(lang === 'ur' ? 'کیا آپ واقعی خریداری تصویر حذف کرنا چاہتے ہیں؟' : 'Delete purchase image?')) {
+                              await handleUpdatePurchaseImage(p.id!, null);
+                              setLightboxData(null);
+                            }
+                          }
                         })}
                         className="p-2 bg-sky-50 text-sky-600 hover:bg-sky-600 hover:text-white rounded-lg transition-colors border border-sky-200"
                         title={lang === 'ur' ? 'تصویر دیکھیں' : 'View Image'}
@@ -790,6 +1061,19 @@ export default function Records({ lang, setActiveSection, setEditingSale }: Reco
                         <Eye size={16} />
                       </button>
                     )}
+                    <button
+                      onClick={() => setEditingImageItem({
+                        type: 'purchase',
+                        purchaseId: p.id!,
+                        name: p.name,
+                        phone: p.phone,
+                        image: p.img || null
+                      })}
+                      className="p-2 bg-sky-50 text-sky-600 hover:bg-sky-600 hover:text-white rounded-lg transition-colors border border-sky-200"
+                      title={p.img ? (lang === 'ur' ? 'تصویر تبدیل / اپ ڈیٹ کریں' : 'Update/Change Image') : (lang === 'ur' ? 'تصویر شامل کریں' : 'Add Image')}
+                    >
+                      <Camera size={16} />
+                    </button>
                     {p.img && (
                       <button
                         onClick={async () => {
@@ -847,6 +1131,92 @@ export default function Records({ lang, setActiveSection, setEditingSale }: Reco
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Image Manager Modal for Records */}
+      {editingImageItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-sky-100 overflow-hidden space-y-4 p-6">
+            <div className="flex items-center justify-between border-b border-sky-100 pb-3">
+              <div className="space-y-0.5">
+                <h3 className="text-lg font-bold text-sky-900 urdu-text flex items-center gap-2">
+                  <ImageIcon size={20} className="text-gold" />
+                  <span>
+                    {editingImageItem.type === 'saleItem' 
+                      ? (lang === 'ur' ? `بل #${editingImageItem.saleId} - آئٹم تصویر` : `Bill #${editingImageItem.saleId} Item Image`)
+                      : (lang === 'ur' ? `خریداری #${editingImageItem.purchaseId} - تصویر` : `Purchase #${editingImageItem.purchaseId} Image`)}
+                  </span>
+                </h3>
+                <p className="text-xs text-zinc-500 font-medium urdu-text">
+                  {editingImageItem.type === 'saleItem'
+                    ? `${editingImageItem.itemName} (${editingImageItem.customerName})`
+                    : `${editingImageItem.name}`}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingImageItem(null)}
+                className="p-2 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded-xl transition-colors cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <ImageManager
+                image={editingImageItem.image}
+                onChange={async (newImg) => {
+                  if (editingImageItem.type === 'saleItem') {
+                    await handleUpdateSaleItemImage(editingImageItem.saleId, editingImageItem.itemIndex, newImg);
+                  } else {
+                    await handleUpdatePurchaseImage(editingImageItem.purchaseId, newImg);
+                  }
+                }}
+                lang={lang}
+                phone={editingImageItem.phone}
+                title={editingImageItem.type === 'saleItem' ? `${editingImageItem.itemName} - ${editingImageItem.customerName}` : editingImageItem.name}
+                caption={
+                  editingImageItem.type === 'saleItem'
+                    ? `*نفیس جیولرز - بل آئٹم تصویر*\nبل نمبر: #${editingImageItem.saleId}\nگاہک: ${editingImageItem.customerName}\nآئٹم: ${editingImageItem.itemName}`
+                    : `*نفیس جیولرز - سونا خریداری تصویر*\nرسید نمبر: #${editingImageItem.purchaseId}\nبیچنے والے کا نام: ${editingImageItem.name}`
+                }
+                onPreviewClick={(src) => {
+                  setLightboxData({
+                    src,
+                    title: editingImageItem.type === 'saleItem' ? `${editingImageItem.itemName} - ${editingImageItem.customerName}` : editingImageItem.name,
+                    phone: editingImageItem.phone,
+                    caption: editingImageItem.type === 'saleItem'
+                      ? `*نفیس جیولرز - بل آئٹم تصویر*\nبل نمبر: #${editingImageItem.saleId}\nگاہک: ${editingImageItem.customerName}\nآئٹم: ${editingImageItem.itemName}`
+                      : `*نفیس جیولرز - سونا خریداری تصویر*\nرسید نمبر: #${editingImageItem.purchaseId}\nبیچنے والے کا نام: ${editingImageItem.name}`
+                  });
+                }}
+              />
+            </div>
+
+            <div className="pt-2 border-t border-sky-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setEditingImageItem(null)}
+                className="w-full py-2.5 bg-sky-900 hover:bg-sky-800 text-white rounded-xl font-bold text-sm urdu-text transition-colors cursor-pointer"
+              >
+                {lang === 'ur' ? 'مکمل / بند کریں' : 'Done / Close'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox for Fullscreen Image Viewing & Actions */}
+      {lightboxData && (
+        <ImageLightbox
+          src={lightboxData.src}
+          title={lightboxData.title}
+          phone={lightboxData.phone}
+          caption={lightboxData.caption}
+          onUpdate={lightboxData.onUpdate}
+          onDelete={lightboxData.onDelete}
+          onClose={() => setLightboxData(null)}
+        />
+      )}
     </div>
   );
 }

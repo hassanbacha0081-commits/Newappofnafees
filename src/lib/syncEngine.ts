@@ -1,3 +1,4 @@
+import React from 'react';
 import { 
   collection, 
   doc, 
@@ -136,6 +137,8 @@ export interface SyncEngineStatus {
   pendingCount: number;
   lastSyncTime: number | null;
   lastSyncError: string | null;
+  isQuotaExceeded: boolean;
+  quotaExceededMessage: string | null;
   conflictCount: number;
   migratedRecordsCount: number;
   isMigrating: boolean;
@@ -152,10 +155,33 @@ let syncStatus: SyncEngineStatus = {
   pendingCount: 0,
   lastSyncTime: null,
   lastSyncError: null,
+  isQuotaExceeded: false,
+  quotaExceededMessage: null,
   conflictCount: 0,
   migratedRecordsCount: 0,
   isMigrating: false,
   migrationProgress: 0,
+};
+
+/**
+ * Detects if an error is caused by Firebase / Firestore quota or resource limits.
+ */
+export const isQuotaError = (err: any): boolean => {
+  if (!err) return false;
+  const str = (err.message || err.code || String(err)).toLowerCase();
+  return (
+    str.includes('quota') ||
+    str.includes('resource_exhausted') ||
+    str.includes('free daily read units') ||
+    str.includes('quota exceeded') ||
+    str.includes('quota limit') ||
+    str.includes('limit exceeded') ||
+    str.includes('daily read units per project')
+  );
+};
+
+export const getFirestoreQuotaUpgradeUrl = (): string => {
+  return 'https://console.firebase.google.com/project/engaged-striker-cj4jh/firestore/databases/ai-studio-remixnafeesjewel-54790b84-fdd5-46df-ac31-4e71270cda9d/data?openUpgradeDialog=true';
 };
 
 type StatusListener = (status: SyncEngineStatus) => void;
@@ -164,7 +190,21 @@ const statusListeners: Set<StatusListener> = new Set();
 export const subscribeSyncStatus = (listener: StatusListener) => {
   statusListeners.add(listener);
   listener({ ...syncStatus });
-  return () => statusListeners.delete(listener);
+  return () => {
+    statusListeners.delete(listener);
+  };
+};
+
+export const useSyncStatus = (): SyncEngineStatus => {
+  const [status, setStatus] = React.useState<SyncEngineStatus>(() => ({ ...syncStatus }));
+
+  React.useEffect(() => {
+    return subscribeSyncStatus((newStatus) => {
+      setStatus(newStatus);
+    });
+  }, []);
+
+  return status;
 };
 
 const notifyStatus = () => {
@@ -326,10 +366,19 @@ export const queueLocalChange = async (
 
 let debounceTimer: NodeJS.Timeout | null = null;
 const debounceSync = () => {
+  // If quota is currently exceeded, do not schedule continuous sync runs
+  if (syncStatus.isQuotaExceeded) return;
+
   if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
-    runFullSync().catch(console.error);
-  }, 1000);
+    runFullSync().catch((err) => {
+      if (isQuotaError(err)) {
+        console.warn('Sync delayed due to quota limits.');
+      } else {
+        console.error(err);
+      }
+    });
+  }, 2000);
 };
 
 /**
@@ -490,17 +539,33 @@ export const migrateLocalIndexedDBToFirestore = async (
 
 /**
  * 3. RUN FULL TWO-WAY SYNCHRONIZATION
- * - Process pending outbox queue (Upload)
+ * - Process pending outbox queue (Upload) - writes directly without redundant reads
  * - Fetch modified cloud records since last sync (Download)
- * - Detect and safely resolve conflicts
+ * - Detect and safely handle quota limits without breaking local operations
  */
-export const runFullSync = async (): Promise<{ success: boolean; pushed: number; pulled: number; error?: string }> => {
+export const runFullSync = async (force: boolean = false): Promise<{ success: boolean; pushed: number; pulled: number; error?: string }> => {
   if (syncStatus.isSyncing) {
     return { success: false, pushed: 0, pulled: 0, error: 'Sync already in progress' };
   }
 
   if (!syncStatus.isOnline) {
     return { success: false, pushed: 0, pulled: 0, error: 'Offline. Data is saved locally.' };
+  }
+
+  // If quota is exceeded and this is not a manual force retry, skip cloud requests
+  if (syncStatus.isQuotaExceeded && !force) {
+    return { 
+      success: false, 
+      pushed: 0, 
+      pulled: 0, 
+      error: 'Firestore daily free read quota reached. All data is saved safely on your device and will sync automatically when quota resets.' 
+    };
+  }
+
+  // If forced, reset quota exceeded flag to test connection
+  if (force) {
+    syncStatus.isQuotaExceeded = false;
+    syncStatus.quotaExceededMessage = null;
   }
 
   syncStatus.isSyncing = true;
@@ -511,7 +576,7 @@ export const runFullSync = async (): Promise<{ success: boolean; pushed: number;
   let pulledCount = 0;
 
   try {
-    // --- STEP A: PUSH LOCAL QUEUE TO FIRESTORE ---
+    // --- STEP A: PUSH LOCAL QUEUE TO FIRESTORE (Zero-Read Outbox Pattern) ---
     const pendingQueue = await db.syncQueue
       .where('status')
       .equals('pending')
@@ -534,7 +599,7 @@ export const runFullSync = async (): Promise<{ success: boolean; pushed: number;
           const docRef = getShopDocRef(collectionName, item.syncId);
 
           if (item.action === 'delete') {
-            // Soft delete on cloud
+            // Soft delete on cloud (Direct write, zero reads required)
             await setDoc(docRef, {
               _syncId: item.syncId,
               _deletedAt: item.data?._deletedAt || Date.now(),
@@ -542,31 +607,7 @@ export const runFullSync = async (): Promise<{ success: boolean; pushed: number;
               _deviceId: getDeviceId()
             }, { merge: true });
           } else {
-            // Check cloud version for conflict
-            const cloudSnap = await getDoc(docRef);
-            if (cloudSnap.exists()) {
-              const cloudData = cloudSnap.data();
-              // Conflict check: If cloud updated after local timestamp by different device
-              if (
-                cloudData._updatedAt && 
-                item.data?._updatedAt && 
-                cloudData._updatedAt > item.data._updatedAt && 
-                cloudData._deviceId !== getDeviceId()
-              ) {
-                // Register conflict
-                await db.syncConflicts.add({
-                  table: item.table,
-                  syncId: item.syncId,
-                  localData: item.data,
-                  cloudData: cloudData,
-                  detectedAt: Date.now(),
-                  resolved: false
-                });
-                await db.syncQueue.update(item.id!, { status: 'failed', error: 'Conflict detected' });
-                continue;
-              }
-            }
-
+            // Direct upsert with merge: true (Zero reads required!)
             const cleanPayload = cleanForFirestore({
               ...item.data,
               _syncedAt: Date.now()
@@ -578,6 +619,15 @@ export const runFullSync = async (): Promise<{ success: boolean; pushed: number;
           await db.syncQueue.delete(item.id!);
           pushedCount++;
         } catch (itemErr: any) {
+          if (isQuotaError(itemErr)) {
+            syncStatus.isQuotaExceeded = true;
+            syncStatus.quotaExceededMessage = 'Firestore daily free read quota reached. All data is saved safely on your device.';
+            stopRealtimeListeners();
+            notifyStatus();
+            console.warn('Firestore quota reached during push. Halting queue processing to protect client.');
+            break;
+          }
+
           console.error(`Failed to push queue item #${item.id}:`, itemErr);
           await db.syncQueue.update(item.id!, {
             retries: (item.retries || 0) + 1,
@@ -587,12 +637,26 @@ export const runFullSync = async (): Promise<{ success: boolean; pushed: number;
       }
     }
 
+    // If quota was hit during push, do not proceed to pull
+    if (syncStatus.isQuotaExceeded) {
+      syncStatus.isSyncing = false;
+      notifyStatus();
+      return { 
+        success: false, 
+        pushed: pushedCount, 
+        pulled: 0, 
+        error: 'Firestore daily free read quota reached. Data is safely stored locally on your device.' 
+      };
+    }
+
     // --- STEP B: PULL CLOUD CHANGES INTO LOCAL INDEXEDDB ---
     const lastSyncSetting = await db.settings.get('lastCloudSyncTimestamp');
     const sinceTimestamp = lastSyncSetting?.value ? Number(lastSyncSetting.value) : 0;
 
     await runWithRemoteSync(async () => {
       for (const tableName of SYNC_TABLES) {
+        if (syncStatus.isQuotaExceeded) break;
+
         const collectionName = TABLE_COLLECTIONS[tableName] || tableName;
         const colRef = collection(firestore, 'shops', syncStatus.shopId, collectionName);
 
@@ -606,6 +670,14 @@ export const runFullSync = async (): Promise<{ success: boolean; pushed: number;
         try {
           snapshot = await getDocs(q);
         } catch (tableErr: any) {
+          if (isQuotaError(tableErr)) {
+            syncStatus.isQuotaExceeded = true;
+            syncStatus.quotaExceededMessage = 'Firestore daily free read quota reached. All data is saved safely on your device.';
+            stopRealtimeListeners();
+            notifyStatus();
+            console.warn(`Firestore read quota reached on table ${tableName}. Pull halted.`);
+            break;
+          }
           console.warn(`Pull skipped for ${tableName}:`, tableErr);
           continue;
         }
@@ -646,7 +718,7 @@ export const runFullSync = async (): Promise<{ success: boolean; pushed: number;
             continue;
           }
 
-          // If local is newer than cloud, do not overwrite (or record conflict)
+          // If local is newer than cloud, do not overwrite
           if (localExisting && localExisting._updatedAt && cloudData._updatedAt && localExisting._updatedAt > cloudData._updatedAt) {
             continue;
           }
@@ -669,27 +741,35 @@ export const runFullSync = async (): Promise<{ success: boolean; pushed: number;
       }
     });
 
-    const now = Date.now();
-    syncStatus.lastSyncTime = now;
-    syncStatus.lastSyncError = null;
-    
-    // Save local sync timestamps under remote-sync lock so they never generate queue items
-    await runWithRemoteSync(async () => {
-      await db.settings.put({ key: 'lastCloudSyncTimestamp', value: String(now) });
-      await db.settings.put({ key: 'lastCloudSyncDate', value: new Date().toISOString() });
-    });
+    if (!syncStatus.isQuotaExceeded) {
+      const now = Date.now();
+      syncStatus.lastSyncTime = now;
+      syncStatus.lastSyncError = null;
+      
+      // Save local sync timestamps under remote-sync lock so they never generate queue items
+      await runWithRemoteSync(async () => {
+        await db.settings.put({ key: 'lastCloudSyncTimestamp', value: String(now) });
+        await db.settings.put({ key: 'lastCloudSyncDate', value: new Date().toISOString() });
+      });
+    }
 
     await updatePendingCount();
     syncStatus.isSyncing = false;
     notifyStatus();
 
-    return { success: true, pushed: pushedCount, pulled: pulledCount };
+    return { success: !syncStatus.isQuotaExceeded, pushed: pushedCount, pulled: pulledCount };
   } catch (err: any) {
     syncStatus.isSyncing = false;
-    syncStatus.lastSyncError = err.message || String(err);
+    if (isQuotaError(err)) {
+      syncStatus.isQuotaExceeded = true;
+      syncStatus.quotaExceededMessage = 'Firestore daily free read quota reached. All data is saved safely on your device.';
+      stopRealtimeListeners();
+    } else {
+      syncStatus.lastSyncError = err.message || String(err);
+    }
     notifyStatus();
-    console.error('Full sync failed:', err);
-    return { success: false, pushed: pushedCount, pulled: pulledCount, error: syncStatus.lastSyncError || 'Sync failed' };
+    console.error('Full sync status:', err);
+    return { success: false, pushed: pushedCount, pulled: pulledCount, error: syncStatus.lastSyncError || 'Sync interrupted' };
   }
 };
 
@@ -763,7 +843,15 @@ export const startRealtimeListeners = () => {
         });
       });
     }, (err) => {
-      console.warn(`Realtime listener error for ${tableName}:`, err);
+      if (isQuotaError(err)) {
+        syncStatus.isQuotaExceeded = true;
+        syncStatus.quotaExceededMessage = 'Firestore daily free read quota reached. All data is saved safely on your device.';
+        stopRealtimeListeners();
+        notifyStatus();
+        console.warn(`Firestore read quota reached in listener for ${tableName}. Realtime listener paused.`);
+      } else {
+        console.warn(`Realtime listener error for ${tableName}:`, err);
+      }
     });
 
     activeUnsubscribes.push(unsub);
