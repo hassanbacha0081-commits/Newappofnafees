@@ -971,11 +971,11 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
                 <tbody>
                   <tr style={{ borderBottom: '1px solid #ddd' }}>
                     <th className="font-nastaliq" style={{ fontSize: '12px', padding: '6px 10px', textAlign: 'right', background: 'transparent', color: '#333' }}>کل بقیہ سونا (Original Net):</th>
-                    <td className="font-mono font-bold text-zinc-900" style={{ fontSize: '12px', padding: '6px 10px', textAlign: 'left' }}>{karigar.net.toFixed(2)}g</td>
+                    <td className="font-mono font-bold text-zinc-900" style={{ fontSize: '12px', padding: '6px 10px', textAlign: 'left' }}>{(Number(karigar.net) || 0).toFixed(2)}g</td>
                   </tr>
                   <tr style={{ borderBottom: '1px solid #ddd' }}>
                     <th className="font-nastaliq" style={{ fontSize: '12px', padding: '6px 10px', textAlign: 'right', background: 'transparent', color: '#166534' }}>وصول شدہ بقایا (Received Later):</th>
-                    <td className="font-mono font-bold text-green-700" style={{ fontSize: '12px', padding: '6px 10px', textAlign: 'left' }}>{karigar.receivedRemaining.toFixed(2)}g</td>
+                    <td className="font-mono font-bold text-green-700" style={{ fontSize: '12px', padding: '6px 10px', textAlign: 'left' }}>{(Number(karigar.receivedRemaining) || 0).toFixed(2)}g</td>
                   </tr>
                   {karigar.settledDate && (
                     <tr style={{ borderBottom: '1px solid #ddd' }}>
@@ -985,7 +985,7 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
                   )}
                   <tr style={{ borderTop: '2px solid #b8860b' }}>
                     <th className="font-nastaliq" style={{ fontSize: '13px', padding: '6px 10px', textAlign: 'right', background: 'transparent', color: '#dc2626', fontWeight: 'bold' }}>بقایا بقایا (Outstanding Balance):</th>
-                    <td className="font-mono font-black text-red-600" style={{ fontSize: '13px', padding: '6px 10px', textAlign: 'left' }}>{Math.max(0, karigar.net - karigar.receivedRemaining).toFixed(2)}g</td>
+                    <td className="font-mono font-black text-red-600" style={{ fontSize: '13px', padding: '6px 10px', textAlign: 'left' }}>{Math.max(0, (Number(karigar.net) || 0) - (Number(karigar.receivedRemaining) || 0)).toFixed(2)}g</td>
                   </tr>
                 </tbody>
               </table>

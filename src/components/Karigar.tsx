@@ -179,9 +179,9 @@ export default function Karigar({ lang }: KarigarProps) {
     }
 
     if (baqayaFilter === 'pending') {
-      result = result.filter(k => (k.net - (k.receivedRemaining || 0)) > 0.005);
+      result = result.filter(k => ((parseFloat(String(k.net || 0)) || 0) - (parseFloat(String(k.receivedRemaining || 0)) || 0)) > 0.005);
     } else if (baqayaFilter === 'cleared') {
-      result = result.filter(k => (k.net - (k.receivedRemaining || 0)) <= 0.005);
+      result = result.filter(k => ((parseFloat(String(k.net || 0)) || 0) - (parseFloat(String(k.receivedRemaining || 0)) || 0)) <= 0.005);
     }
 
     return result;
@@ -192,30 +192,34 @@ export default function Karigar({ lang }: KarigarProps) {
     let rec = 0;
     let count = 0;
     let pendingWt = 0;
-    rawKarigars.forEach(k => {
-      given += (k.given || 0);
-      rec += (k.rec || 0);
-      const rem = (k.net || 0) - (k.receivedRemaining || 0);
+    (rawKarigars || []).forEach(k => {
+      const g = parseFloat(String(k.given || 0)) || 0;
+      const r = parseFloat(String(k.rec || 0)) || 0;
+      const netVal = parseFloat(String(k.net || 0)) || 0;
+      const recRem = parseFloat(String(k.receivedRemaining || 0)) || 0;
+      given += g;
+      rec += r;
+      const rem = netVal - recRem;
       if (rem > 0.005) {
         count += 1;
         pendingWt += rem;
       }
     });
     return {
-      totalGivenGold: given,
-      totalReceivedGold: rec,
-      totalPendingGoldCount: count,
-      totalPendingGoldWeight: pendingWt
+      totalGivenGold: Number(given) || 0,
+      totalReceivedGold: Number(rec) || 0,
+      totalPendingGoldCount: Number(count) || 0,
+      totalPendingGoldWeight: Number(pendingWt) || 0
     };
   }, [rawKarigars]);
 
   const reCalc = () => {
-    const g = formData.given || 0;
-    const r = formData.rec || 0;
-    const ki = formData.kaatIn || 0;
+    const g = parseFloat(String(formData.given || 0)) || 0;
+    const r = parseFloat(String(formData.rec || 0)) || 0;
+    const ki = parseFloat(String(formData.kaatIn || 0)) || 0;
     const res = (r / 12.150) * ki;
     const net = (g - r) - res;
-    return { res: res.toFixed(2), net: net.toFixed(2) };
+    return { res: (Number(res) || 0).toFixed(2), net: (Number(net) || 0).toFixed(2) };
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -396,11 +400,11 @@ export default function Karigar({ lang }: KarigarProps) {
       <div className="flex gap-6 p-4 bg-white border border-sky-200 rounded-xl shadow-sm overflow-x-auto mb-6">
         <div className="flex flex-col flex-shrink-0 min-w-32">
           <span className="text-xs text-zinc-500 urdu-text font-bold">{lang === 'ur' ? 'کُل دیا گیا سونا:' : 'Total Given Gold:'}</span>
-          <span className="text-2xl font-black text-gold-dark font-mono">{totalGivenGold.toFixed(2)}g</span>
+          <span className="text-2xl font-black text-gold-dark font-mono">{(Number(totalGivenGold) || 0).toFixed(2)}g</span>
         </div>
         <div className="flex flex-col flex-shrink-0 min-w-32 border-l border-sky-100 pl-6">
           <span className="text-xs text-zinc-500 urdu-text font-bold">{lang === 'ur' ? 'کُل وصول سونا:' : 'Total Received Gold:'}</span>
-          <span className="text-2xl font-black text-sky-700 font-mono">{totalReceivedGold.toFixed(2)}g</span>
+          <span className="text-2xl font-black text-sky-700 font-mono">{(Number(totalReceivedGold) || 0).toFixed(2)}g</span>
         </div>
         {totalPendingGoldCount > 0 && (
           <div className="flex flex-col flex-shrink-0 min-w-40 border-l border-red-200 pl-6 bg-red-50/60 -my-4 py-4 pr-4 rounded-r-xl">
@@ -409,7 +413,7 @@ export default function Karigar({ lang }: KarigarProps) {
               {lang === 'ur' ? 'کُل بقایا سونا (کاریگر):' : 'Total Outstanding Gold:'}
             </span>
             <span className="text-2xl font-black text-red-600 font-mono">
-              {totalPendingGoldWeight.toFixed(2)}g
+              {(Number(totalPendingGoldWeight) || 0).toFixed(2)}g
             </span>
             <span className="text-[10px] text-red-500 font-bold urdu-text">
               ({totalPendingGoldCount} {lang === 'ur' ? 'کاریگروں کے پاس سونا بقایا ہے' : 'karigars with pending gold'})
@@ -581,7 +585,9 @@ export default function Karigar({ lang }: KarigarProps) {
 
       <div className="space-y-4">
         {karigars?.map((v) => {
-          const outstandingGold = v.net - (v.receivedRemaining || 0);
+          const netVal = parseFloat(String(v.net || 0)) || 0;
+          const recRemVal = parseFloat(String(v.receivedRemaining || 0)) || 0;
+          const outstandingGold = netVal - recRemVal;
           const hasBaqaya = outstandingGold > 0.005;
           return (
             <div 
@@ -658,7 +664,7 @@ export default function Karigar({ lang }: KarigarProps) {
                 </button>
                 {outstandingGold > 0.005 && (
                   <button 
-                    onClick={() => setSettlementData({ record: v, amount: parseFloat(outstandingGold.toFixed(2)), date: formatDate(new Date(), 'ur-PK') })}
+                    onClick={() => setSettlementData({ record: v, amount: parseFloat((Number(outstandingGold) || 0).toFixed(2)), date: formatDate(new Date(), 'ur-PK') })}
                     className="flex-1 min-w-[100px] p-2 bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-600 hover:text-white transition-all text-xs font-bold urdu-text flex items-center justify-center gap-1 border border-emerald-100"
                   >
                     <Check size={14} /> وصول سونا
@@ -682,7 +688,7 @@ export default function Karigar({ lang }: KarigarProps) {
                       src: v.img!,
                       title: `${v.name} - ${lang === 'ur' ? 'لیبارٹری رپورٹ' : 'Lab Report'}`,
                       phone: v.phone,
-                      caption: `*نفیس جیولرز - کاریگر رپورٹ*\nکاریگر: ${v.name}\nفون: ${v.phone || '-'}\nکام: ${v.task || '-'}\nدیا گیا سونا: ${v.given}g\nواپسی: ${v.rec}g\nبقایا سونا: ${parseFloat(outstandingGold.toFixed(2))}g`
+                      caption: `*نفیس جیولرز - کاریگر رپورٹ*\nکاریگر: ${v.name}\nفون: ${v.phone || '-'}\nکام: ${v.task || '-'}\nدیا گیا سونا: ${v.given}g\nواپسی: ${v.rec}g\nبقایا سونا: ${parseFloat((Number(outstandingGold) || 0).toFixed(2))}g`
                     })}
                     className="flex-1 min-w-[80px] p-2 bg-sky-50 text-sky-700 rounded-lg hover:bg-sky-100 transition-all text-xs font-bold urdu-text flex items-center justify-center gap-1 border border-sky-100"
                     title={lang === 'ur' ? 'رپورٹ / تصویر دیکھیں' : 'View Report / Image'}
@@ -696,7 +702,7 @@ export default function Karigar({ lang }: KarigarProps) {
                       await shareImageToWhatsApp({
                         imageSrc: v.img!,
                         phone: v.phone,
-                        caption: `*نفیس جیولرز - کاریگر رپورٹ*\nکاریگر: ${v.name}\nفون: ${v.phone || '-'}\nکام: ${v.task || '-'}\nدیا گیا سونا: ${v.given}g\nواپسی: ${v.rec}g\nبقایا سونا: ${parseFloat(outstandingGold.toFixed(2))}g`,
+                        caption: `*نفیس جیولرز - کاریگر رپورٹ*\nکاریگر: ${v.name}\nفون: ${v.phone || '-'}\nکام: ${v.task || '-'}\nدیا گیا سونا: ${v.given}g\nواپسی: ${v.rec}g\nبقایا سونا: ${parseFloat((Number(outstandingGold) || 0).toFixed(2))}g`,
                         title: `Karigar Report - ${v.name}`
                       });
                     }}
