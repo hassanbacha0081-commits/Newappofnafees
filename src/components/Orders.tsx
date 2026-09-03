@@ -288,7 +288,30 @@ export default function Orders({ lang }: OrdersProps) {
 
     let id;
     if (editId) {
-      await db.orders.put({ ...order, id: editId });
+      await db.orders.update(editId, {
+        name: order.name,
+        phone: order.phone,
+        date: order.date,
+        due: order.due,
+        item: order.item,
+        measurements: order.measurements,
+        pricePerTola: order.pricePerTola,
+        karigar: order.karigar,
+        oldWt: order.oldWt,
+        readyWt: order.readyWt,
+        price: order.price,
+        mazdori: order.mazdori,
+        total: order.total,
+        payments: order.payments,
+        rem: order.rem,
+        discount: order.discount,
+        status: order.status,
+        img: order.img,
+        makingCharges: order.makingCharges,
+        weightPolish: order.weightPolish,
+        totalWt: order.totalWt,
+        _updatedAt: Date.now()
+      });
       id = editId;
     } else {
       id = await db.orders.add(order);

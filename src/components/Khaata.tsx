@@ -385,8 +385,18 @@ export default function Khaata({ lang }: KhaataProps) {
 
     try {
       if (editingEntryId !== null) {
-        newEntry.id = editingEntryId;
-        await db.khaataEntries.put(newEntry);
+        await db.khaataEntries.update(editingEntryId, {
+          date: newEntry.date,
+          details: newEntry.details,
+          type: newEntry.type,
+          mixWeight: newEntry.mixWeight,
+          pakaye: newEntry.pakaye,
+          kaatRati: newEntry.kaatRati,
+          pureWeight: newEntry.pureWeight,
+          pasaDia: newEntry.pasaDia,
+          img: currentImg,
+          _updatedAt: Date.now()
+        });
       } else {
         await db.khaataEntries.add(newEntry);
       }

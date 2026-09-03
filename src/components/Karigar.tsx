@@ -252,14 +252,23 @@ export default function Karigar({ lang }: KarigarProps) {
     };
 
     if (editId) {
-      entry.id = editId;
       const old = await db.karigars.get(editId);
-      if (old) {
-        if (!currentImg) entry.img = old.img;
-        entry.receivedRemaining = old.receivedRemaining;
-        entry.settledDate = old.settledDate;
+      const updateData: any = {
+        name: entry.name,
+        phone: entry.phone,
+        task: entry.task,
+        given: entry.given,
+        rec: entry.rec,
+        kaat: parseFloat(res),
+        net: parseFloat(net),
+        _updatedAt: Date.now()
+      };
+      if (currentImg) {
+        updateData.img = currentImg;
+      } else if (old?.img) {
+        updateData.img = old.img;
       }
-      await db.karigars.put(entry);
+      await db.karigars.update(editId, updateData);
     } else {
       await db.karigars.add(entry);
     }
@@ -795,12 +804,13 @@ export default function Karigar({ lang }: KarigarProps) {
                     alert(lang === 'ur' ? "براہ کرم درست وزن لکھیں!" : "Please enter a valid weight!");
                     return;
                   }
-                  const updatedRecord: KarigarRecord = {
-                    ...settlementData.record,
-                    receivedRemaining: (settlementData.record.receivedRemaining || 0) + settlementData.amount,
-                    settledDate: settlementData.date
-                  };
-                  await db.karigars.put(updatedRecord);
+                  if (settlementData.record.id) {
+                    await db.karigars.update(settlementData.record.id, {
+                      receivedRemaining: (settlementData.record.receivedRemaining || 0) + settlementData.amount,
+                      settledDate: settlementData.date,
+                      _updatedAt: Date.now()
+                    });
+                  }
                   setSettlementData(null);
                 }}
                 className="flex-[2] py-3 bg-gold text-black font-bold rounded-xl hover:bg-gold-light transition-all urdu-text text-base shadow-md"

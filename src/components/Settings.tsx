@@ -3,7 +3,7 @@ import { db } from '../db';
 import { translations, type Language } from '../translations';
 import { APP_CONFIG } from '../config';
 import { COLOR_PALETTES, type ColorPalette } from '../lib/colors';
-import { Save, Download, Upload, Languages, Trash2, AlertTriangle, BadgeDollarSign, History, ShoppingBag, Cloud, CloudOff, RefreshCw, Calendar, ExternalLink, CheckCircle2, AlertCircle, ShieldCheck } from 'lucide-react';
+import { Save, Download, Upload, Languages, Trash2, AlertTriangle, BadgeDollarSign, History, ShoppingBag, RefreshCw, Calendar, AlertCircle } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import { SecurityModal } from './SecurityModal';
 import { Capacitor } from '@capacitor/core';
@@ -19,7 +19,9 @@ import {
   downloadBackupContent,
   ensureAccessToken
 } from '../lib/googleDriveBackup';
-import { useSyncStatus, runFullSync, getFirestoreQuotaUpgradeUrl } from '../lib/syncEngine';
+import { compressImage } from '../lib/utils';
+import { cleanupDuplicateRecords } from '../lib/cleanupDuplicates';
+import { restoreBackupData } from '../lib/backupRestore';
 
 interface SettingsProps {
   lang: Language;
@@ -115,27 +117,33 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
   const [lastDriveBackup, setLastDriveBackup] = useState<string | null>(null);
   const [driveStatusMessage, setDriveStatusMessage] = useState<string>('');
 
-  // Live Cloud Sync Status
-  const syncStatus = useSyncStatus();
-  const [isManualSyncing, setIsManualSyncing] = useState(false);
-  const [manualSyncFeedback, setManualSyncFeedback] = useState<string | null>(null);
+  // Deduplication state
+  const [isDeduplicating, setIsDeduplicating] = useState(false);
+  const [dedupResult, setDedupResult] = useState<string | null>(null);
 
-  const handleManualCloudSync = async () => {
-    setIsManualSyncing(true);
-    setManualSyncFeedback(null);
+  const handleCleanDuplicates = async () => {
+    setIsDeduplicating(true);
+    setDedupResult(null);
     try {
-      const res = await runFullSync(true);
-      if (res.success) {
-        setManualSyncFeedback(lang === 'ur' ? 'کلاؤڈ سنک کامیابی سے مکمل ہو گیا!' : 'Cloud sync completed successfully!');
-      } else if (syncStatus.isQuotaExceeded) {
-        setManualSyncFeedback(lang === 'ur' ? 'فائر بیس یومیہ کوٹہ عارضی طور پر مکمل ہے۔ ڈیٹا لوکل محفوظ ہے۔' : 'Firestore daily quota reached. Local data is 100% safe.');
+      const res = await cleanupDuplicateRecords();
+      if (res.removedTotal > 0) {
+        setDedupResult(
+          lang === 'ur'
+            ? `کامیابی! کل ${res.removedTotal} اضافی ڈپلیکیٹ ریکارڈز صاف کر دیے گئے۔`
+            : `Success! Cleaned up ${res.removedTotal} duplicate records across tables.`
+        );
       } else {
-        setManualSyncFeedback(res.error || (lang === 'ur' ? 'سنک میں مسئلہ پیش آیا' : 'Sync encountered an issue'));
+        setDedupResult(
+          lang === 'ur'
+            ? 'تمام ریکارڈز محفوظ اور درست ہیں، کوئی ڈپلیکیٹ نہیں ملا۔'
+            : 'All records are clean. No duplicate records found.'
+        );
       }
-    } catch (e: any) {
-      setManualSyncFeedback(e.message || String(e));
+    } catch (err) {
+      console.error('Deduplication failed:', err);
+      setDedupResult(lang === 'ur' ? 'ڈپلیکیٹ صفائی میں خرابی پیش آئی' : 'Failed to clean duplicates');
     } finally {
-      setIsManualSyncing(false);
+      setIsDeduplicating(false);
     }
   };
 
@@ -258,28 +266,8 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
             return;
           }
 
-          // Clear database and bulkAdd
-          await db.sales.clear();
-          await db.orders.clear();
-          await db.karigars.clear();
-          await db.repairs.clear();
-          await db.stock.clear();
-          await db.settings.clear();
-          await db.goldPurchases.clear();
-          if (db.expenses) await db.expenses.clear();
-          if (db.khaataAccounts) await db.khaataAccounts.clear();
-          if (db.khaataEntries) await db.khaataEntries.clear();
-
-          if (data.sales) await db.sales.bulkAdd(data.sales);
-          if (data.orders) await db.orders.bulkAdd(data.orders);
-          if (data.karigars) await db.karigars.bulkAdd(data.karigars);
-          if (data.repairs) await db.repairs.bulkAdd(data.repairs);
-          if (data.stock) await db.stock.bulkAdd(data.stock);
-          if (data.settings) await db.settings.bulkAdd(data.settings);
-          if (data.goldPurchases) await db.goldPurchases.bulkAdd(data.goldPurchases);
-          if (data.expenses && db.expenses) await db.expenses.bulkAdd(data.expenses);
-          if (data.khaataAccounts && db.khaataAccounts) await db.khaataAccounts.bulkAdd(data.khaataAccounts);
-          if (data.khaataEntries && db.khaataEntries) await db.khaataEntries.bulkAdd(data.khaataEntries);
+          // Safe, cloud-hardened restore
+          await restoreBackupData(data);
 
           // Re-set drive connected flag so it stays connected
           await db.settings.put({ key: 'googleDriveConnected', value: 'true' });
@@ -611,25 +599,7 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
         reader.onload = async (event) => {
           try {
             const data = JSON.parse(event.target?.result as string);
-            await db.sales.clear();
-            await db.orders.clear();
-            await db.karigars.clear();
-            await db.repairs.clear();
-            await db.stock.clear();
-            await db.settings.clear();
-            await db.goldPurchases.clear();
-            if (db.khaataAccounts) await db.khaataAccounts.clear();
-            if (db.khaataEntries) await db.khaataEntries.clear();
-
-            if (data.sales) await db.sales.bulkAdd(data.sales);
-            if (data.orders) await db.orders.bulkAdd(data.orders);
-            if (data.karigars) await db.karigars.bulkAdd(data.karigars);
-            if (data.repairs) await db.repairs.bulkAdd(data.repairs);
-            if (data.stock) await db.stock.bulkAdd(data.stock);
-            if (data.settings) await db.settings.bulkAdd(data.settings);
-            if (data.goldPurchases) await db.goldPurchases.bulkAdd(data.goldPurchases);
-            if (data.khaataAccounts && db.khaataAccounts) await db.khaataAccounts.bulkAdd(data.khaataAccounts);
-            if (data.khaataEntries && db.khaataEntries) await db.khaataEntries.bulkAdd(data.khaataEntries);
+            await restoreBackupData(data);
 
             alert(lang === 'ur' ? 'ڈیٹا کامیابی سے بحال ہو گیا ہے' : 'Data restored successfully');
             window.location.reload();
@@ -806,10 +776,16 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
                       if (file) {
                         const reader = new FileReader();
                         reader.onloadend = async () => {
-                          const b64 = reader.result;
-                          await db.settings.put({ key: 'shopLogo', value: b64 });
-                          setCurrentSettings(prev => ({ ...prev, shopLogo: b64 }));
-                          alert(lang === 'ur' ? 'تصویر کامیابی سے تبدیل ہو گئی' : 'Picture updated successfully');
+                          const b64 = reader.result as string;
+                          try {
+                            const compressed = await compressImage(b64, 400, 400, 0.7);
+                            await db.settings.put({ key: 'shopLogo', value: compressed });
+                            setCurrentSettings(prev => ({ ...prev, shopLogo: compressed }));
+                            alert(lang === 'ur' ? 'تصویر کامیابی سے تبدیل ہو گئی' : 'Picture updated successfully');
+                          } catch {
+                            await db.settings.put({ key: 'shopLogo', value: b64 });
+                            setCurrentSettings(prev => ({ ...prev, shopLogo: b64 }));
+                          }
                         };
                         reader.readAsDataURL(file);
                       }
@@ -927,124 +903,6 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
                 </div>
                 <p className="text-[10px] text-zinc-400">{lang === 'ur' ? 'ایپ کو کھولنے کے لیے پاس ورڈ سیٹ کریں' : 'Set a password to lock the application on startup.'}</p>
               </div>
-            </div>
-          </div>
-
-          
-          {/* Cloud Database Synchronization & Quota Status */}
-          <div className="bg-white p-8 rounded-2xl shadow-xl border border-sky-100 space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-sky-100 pb-4">
-              <h3 className="text-xl font-bold text-sky-900 urdu-text flex items-center gap-3">
-                <Cloud className="text-sky-600" />
-                <span>{lang === 'ur' ? 'کلاؤڈ ڈیٹا سنک (Firebase Cloud Sync)' : 'Cloud Data Sync (Firebase)'}</span>
-              </h3>
-              <div className="flex items-center gap-2">
-                {syncStatus.isQuotaExceeded ? (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-100 text-amber-900 border border-amber-300 rounded-full text-xs font-bold urdu-text">
-                    <AlertTriangle size={14} className="text-amber-600" />
-                    <span>{lang === 'ur' ? 'یومیہ کوٹہ مکمل (لوکل محفوظ)' : 'Daily Quota Limit (Local Safe)'}</span>
-                  </span>
-                ) : syncStatus.isSyncing ? (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-sky-100 text-sky-800 border border-sky-300 rounded-full text-xs font-bold urdu-text">
-                    <RefreshCw size={14} className="animate-spin text-sky-600" />
-                    <span>{lang === 'ur' ? 'سنک ہو رہا ہے...' : 'Syncing...'}</span>
-                  </span>
-                ) : syncStatus.pendingCount > 0 ? (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-100 text-blue-800 border border-blue-300 rounded-full text-xs font-bold urdu-text">
-                    <RefreshCw size={14} className="text-blue-600" />
-                    <span>{syncStatus.pendingCount} {lang === 'ur' ? 'تبدیلیاں قطار میں' : 'changes pending'}</span>
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-full text-xs font-bold urdu-text">
-                    <CheckCircle2 size={14} className="text-emerald-600" />
-                    <span>{lang === 'ur' ? 'کامیابی سے منسلک' : 'Synced & Live'}</span>
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Quota Exceeded Notice Box */}
-            {syncStatus.isQuotaExceeded && (
-              <div className="p-4 bg-amber-50 border-2 border-amber-200 rounded-2xl space-y-3">
-                <div className="flex items-start gap-3">
-                  <ShieldCheck className="text-amber-700 flex-shrink-0 mt-0.5" size={22} />
-                  <div className="space-y-1">
-                    <h4 className="font-bold text-amber-900 text-sm urdu-text">
-                      {lang === 'ur' ? 'آپ کا ڈیٹا 100% محفوظ ہے!' : 'Your Data is 100% Safe Locally!'}
-                    </h4>
-                    <p className="text-xs text-amber-800 leading-relaxed urdu-text">
-                      {lang === 'ur' 
-                        ? 'فائر بیس کلاؤڈ ڈیٹا بیس کا مفت یومیہ ریڈ کوٹہ عارضی طور پر مکمل ہو گیا ہے۔ تمام بل، خریداریاں، کسٹمرز اور کلاؤڈ تبدیلیاں اس ڈیوائس پر فوری محفوظ ہو چکی ہیں۔ جیسے ہی اگلے 24 گھنٹوں میں کوٹہ ری سیٹ ہوگا، بیک گراؤنڈ سنک خود بخود بحال ہو جائے گا۔'
-                        : 'The Firebase Spark free tier daily read quota has been reached. All invoices, purchases, contacts, and transactions are completely preserved on this local device. Automatic background sync will resume when the quota resets.'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="pt-2 flex flex-wrap gap-2">
-                  <a
-                    href={getFirestoreQuotaUpgradeUrl()}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
-                  >
-                    <ExternalLink size={14} />
-                    <span className="urdu-text">{lang === 'ur' ? 'فائر بیس کنسول میں اپ گریڈ دیکھیں' : 'View in Firebase Console (Upgrade)'}</span>
-                  </a>
-                </div>
-              </div>
-            )}
-
-            {/* Controls & Statistics */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="p-4 bg-sky-50 rounded-xl border border-sky-100">
-                <span className="text-[10px] text-sky-600 uppercase font-bold tracking-wider block">
-                  {lang === 'ur' ? 'آخری سنک کا وقت' : 'Last Sync Time'}
-                </span>
-                <span className="text-sm font-black text-sky-950 font-mono mt-1 block">
-                  {syncStatus.lastSyncTime ? new Date(syncStatus.lastSyncTime).toLocaleTimeString() : (lang === 'ur' ? 'ابھی نہیں' : 'Never')}
-                </span>
-              </div>
-
-              <div className="p-4 bg-sky-50 rounded-xl border border-sky-100">
-                <span className="text-[10px] text-sky-600 uppercase font-bold tracking-wider block">
-                  {lang === 'ur' ? 'قطار میں تبدیلیاں' : 'Pending Cloud Queue'}
-                </span>
-                <span className="text-sm font-black text-sky-950 font-mono mt-1 block">
-                  {syncStatus.pendingCount} {lang === 'ur' ? 'آئٹمز' : 'items'}
-                </span>
-              </div>
-
-              <div className="p-4 bg-sky-50 rounded-xl border border-sky-100">
-                <span className="text-[10px] text-sky-600 uppercase font-bold tracking-wider block">
-                  {lang === 'ur' ? 'انٹرنیٹ رابطہ' : 'Connection'}
-                </span>
-                <span className={`text-sm font-black font-mono mt-1 block ${syncStatus.isOnline ? 'text-emerald-700' : 'text-zinc-500'}`}>
-                  {syncStatus.isOnline ? (lang === 'ur' ? 'آن لائن (Online)' : 'Online') : (lang === 'ur' ? 'آف لائن (Offline)' : 'Offline')}
-                </span>
-              </div>
-            </div>
-
-            {/* Manual Sync Button */}
-            <div className="pt-2 flex flex-col sm:flex-row items-center gap-3">
-              <button
-                type="button"
-                onClick={handleManualCloudSync}
-                disabled={isManualSyncing || !syncStatus.isOnline}
-                className="w-full sm:w-auto px-6 py-3 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white rounded-xl font-bold text-sm urdu-text flex items-center justify-center gap-2 transition-all shadow-md active:scale-95"
-              >
-                <RefreshCw size={16} className={isManualSyncing ? 'animate-spin' : ''} />
-                <span>
-                  {isManualSyncing 
-                    ? (lang === 'ur' ? 'سنک ہو رہا ہے...' : 'Syncing...') 
-                    : (lang === 'ur' ? 'ابھی سنک کریں (Sync Now)' : 'Sync Now')}
-                </span>
-              </button>
-
-              {manualSyncFeedback && (
-                <span className="text-xs text-sky-800 font-bold urdu-text">
-                  {manualSyncFeedback}
-                </span>
-              )}
             </div>
           </div>
 
@@ -1170,7 +1028,28 @@ export default function Settings({ lang, setGoldRate, setLang, paletteId, setPal
               </p>
             </div>
 
-            <div className="pt-4">
+            {/* Database Deduplication Tool */}
+            <div className="pt-4 space-y-2">
+              <button 
+                onClick={handleCleanDuplicates}
+                disabled={isDeduplicating}
+                className="w-full flex items-center justify-center gap-2 p-4 bg-sky-50 text-sky-800 border border-sky-200 rounded-2xl hover:bg-sky-100 hover:text-sky-900 transition-all font-bold disabled:opacity-50"
+              >
+                <RefreshCw size={20} className={isDeduplicating ? 'animate-spin' : ''} />
+                <span className="urdu-text">
+                  {isDeduplicating 
+                    ? (lang === 'ur' ? 'ڈپلیکیٹ ریکارڈز تلاش اور صاف کیے جا رہے ہیں...' : 'Cleaning duplicate records...')
+                    : (lang === 'ur' ? 'اضافی ڈپلیکیٹ ریکارڈز صاف کریں' : 'Clean Duplicate Records Across Database')}
+                </span>
+              </button>
+              {dedupResult && (
+                <div className="p-3 bg-white border border-sky-200 rounded-xl text-center text-xs font-bold text-sky-800 urdu-text shadow-xs">
+                  {dedupResult}
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2">
               <button 
                 onClick={() => setShowConfirmClear(true)}
                 className="w-full flex items-center justify-center gap-2 p-4 bg-red-50 text-red-600 border border-red-100 rounded-2xl hover:bg-red-600 hover:text-white transition-all font-bold group"

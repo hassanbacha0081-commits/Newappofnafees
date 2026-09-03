@@ -16,6 +16,7 @@ import {
 import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, type User } from 'firebase/auth';
 import { firestore, auth } from './firebase';
 import { db } from '../db';
+import { compressImage } from './utils';
 
 // Business & Device Identity Configuration
 export const DEFAULT_SHOP_ID = 'nafees_jewellers_main';
@@ -255,12 +256,35 @@ export const registerSyncHooks = () => {
 
       const capturedSyncId = obj._syncId;
       const capturedObj = { ...obj };
+      const effectiveId = primKey || obj?.id;
 
       // Queue sync item
-      setTimeout(() => {
+      setTimeout(async () => {
         if (isApplyingRemoteSync()) return;
         if (tableName === 'settings' && isExcludedSettingKey(capturedObj?.key)) return;
-        queueLocalChange(tableName, capturedSyncId, 'create', capturedObj);
+
+        let finalSyncId = capturedSyncId;
+        let action: 'create' | 'update' = 'create';
+
+        // If an ID was provided, verify if an existing record was being updated via put()
+        if (effectiveId && tableName !== 'settings') {
+          try {
+            const existing = await table.get(effectiveId);
+            if (existing) {
+              action = 'update';
+              if (existing._syncId && existing._syncId !== capturedSyncId) {
+                // Keep the original _syncId so we do not orphan the Firestore document
+                finalSyncId = existing._syncId;
+                capturedObj._syncId = existing._syncId;
+                await table.update(effectiveId, { _syncId: existing._syncId });
+              }
+            }
+          } catch (e) {
+            // Ignore if record check fails
+          }
+        }
+
+        queueLocalChange(tableName, finalSyncId, action, capturedObj);
       }, 50);
     });
 
@@ -390,18 +414,158 @@ export const getShopDocRef = (collectionName: string, docId: string) => {
 };
 
 /**
- * Safe cleanup of any obsolete local runtime settings items accidentally trapped in syncQueue
+ * Ensures any embedded base64 image in the record is safely compressed and within Firestore's 1MB limit.
+ * Also recursively compresses any sales items images or setting values.
+ */
+export const sanitizePayloadForFirestore = async (
+  data: any, 
+  tableName?: string, 
+  syncId?: string
+): Promise<{ payload: any; wasModified: boolean }> => {
+  if (!data || typeof data !== 'object') {
+    return { payload: data, wasModified: false };
+  }
+
+  let wasModified = false;
+  const cloned = { ...data };
+
+  // 1. Check primary 'img' field
+  if (cloned.img && typeof cloned.img === 'string' && cloned.img.startsWith('data:image')) {
+    if (cloned.img.length > 250000) {
+      try {
+        const compressed = await compressImage(cloned.img, 800, 800, 0.65);
+        if (compressed && compressed.length < cloned.img.length) {
+          cloned.img = compressed;
+          wasModified = true;
+        }
+      } catch (e) {
+        console.warn('Failed to compress oversized image in sync payload:', e);
+      }
+    }
+  }
+
+  // 2. Check settings logo 'value'
+  if (tableName === 'settings' && cloned.key === 'shopLogo' && cloned.value && typeof cloned.value === 'string' && cloned.value.startsWith('data:image')) {
+    if (cloned.value.length > 250000) {
+      try {
+        const compressed = await compressImage(cloned.value, 400, 400, 0.65);
+        if (compressed && compressed.length < cloned.value.length) {
+          cloned.value = compressed;
+          wasModified = true;
+        }
+      } catch (e) {}
+    }
+  }
+
+  // 3. Check items array (for sales items)
+  if (Array.isArray(cloned.items)) {
+    const updatedItems = [];
+    let itemsChanged = false;
+    for (const itm of cloned.items) {
+      if (itm && itm.img && typeof itm.img === 'string' && itm.img.startsWith('data:image') && itm.img.length > 250000) {
+        try {
+          const comp = await compressImage(itm.img, 800, 800, 0.65);
+          if (comp && comp.length < itm.img.length) {
+            updatedItems.push({ ...itm, img: comp });
+            itemsChanged = true;
+            continue;
+          }
+        } catch (e) {}
+      }
+      updatedItems.push(itm);
+    }
+    if (itemsChanged) {
+      cloned.items = updatedItems;
+      wasModified = true;
+    }
+  }
+
+  // 4. Final safety check: Firestore hard limit is 1,048,576 bytes.
+  let estimatedSize = 0;
+  try {
+    estimatedSize = JSON.stringify(cloned).length;
+  } catch (e) {
+    estimatedSize = 0;
+  }
+
+  if (estimatedSize > 750000) {
+    console.warn(`Payload for ${tableName}/${syncId} is large (~${estimatedSize} bytes). Performing emergency downsampling...`);
+    if (cloned.img && typeof cloned.img === 'string' && cloned.img.startsWith('data:image')) {
+      try {
+        const emergencyComp = await compressImage(cloned.img, 400, 400, 0.45);
+        if (emergencyComp && emergencyComp.length < cloned.img.length) {
+          cloned.img = emergencyComp;
+          wasModified = true;
+        }
+      } catch (e) {}
+    }
+    // If still over 900,000 bytes after emergency compression, strip image to avoid dropping business transaction
+    try {
+      if (JSON.stringify(cloned).length > 900000) {
+        console.error(`Document for ${tableName}/${syncId} exceeds 900KB even after compression. Stripping image to protect record integrity.`);
+        cloned.img = null;
+        wasModified = true;
+      }
+    } catch (e) {}
+  }
+
+  return { payload: cloned, wasModified };
+};
+
+/**
+ * Safe cleanup of any obsolete local runtime settings items accidentally trapped in syncQueue,
+ * and automatic healing of any oversized items (such as uncompressed photos).
  */
 export const cleanupOrphanedMetadataQueue = async () => {
   try {
     const queueItems = await db.syncQueue.toArray();
     for (const item of queueItems) {
+      // 1. Exclude runtime settings
       if (item.table === 'settings') {
         const key = item.data?.key || item.syncId;
         if (isExcludedSettingKey(key)) {
           if (item.id) {
             await db.syncQueue.delete(item.id);
           }
+          continue;
+        }
+      }
+
+      // 2. Check for oversized or size-errored items (e.g. item #442)
+      const isSizeError = item.error && (
+        item.error.includes('exceeds the maximum allowed size') || 
+        item.error.includes('1,048,576 bytes')
+      );
+      
+      let itemSize = 0;
+      try {
+        itemSize = item.data ? JSON.stringify(item.data).length : 0;
+      } catch (e) {
+        itemSize = 0;
+      }
+
+      if (isSizeError || itemSize > 400000) {
+        console.log(`Sanitizing oversized queue item #${item.id} (${item.table}/${item.syncId})...`);
+        const { payload: sanitizedData, wasModified } = await sanitizePayloadForFirestore(item.data, item.table, item.syncId);
+        
+        await db.syncQueue.update(item.id!, {
+          data: sanitizedData,
+          status: 'pending',
+          error: undefined,
+          retries: 0
+        });
+
+        // Also heal the local Dexie table record so IndexedDB doesn't store 4MB blobs
+        if (wasModified && sanitizedData.img !== undefined) {
+          await runWithRemoteSync(async () => {
+            const table = (db as any)[item.table];
+            if (table) {
+              const localRec = await table.where('_syncId').equals(item.syncId).first();
+              if (localRec && localRec.id) {
+                await table.update(localRec.id, { img: sanitizedData.img });
+              }
+            }
+          });
         }
       }
     }
@@ -488,9 +652,10 @@ export const migrateLocalIndexedDBToFirestore = async (
             });
           }
 
-          // Build clean Firestore payload (stripping undefined/NaN)
+          // Build clean Firestore payload (stripping undefined/NaN and compressing oversized images)
+          const { payload: sanitizedRecord } = await sanitizePayloadForFirestore(record, tableName, syncId);
           const firestorePayload = cleanForFirestore({
-            ...record,
+            ...sanitizedRecord,
             _table: tableName,
             _syncedAt: Date.now()
           });
@@ -607,9 +772,32 @@ export const runFullSync = async (force: boolean = false): Promise<{ success: bo
               _deviceId: getDeviceId()
             }, { merge: true });
           } else {
+            // Sanitize payload to guarantee base64 images are compressed and within 1MB Firestore limit
+            let dataToPush = item.data;
+            try {
+              const { payload: sanitizedData, wasModified } = await sanitizePayloadForFirestore(item.data, item.table, item.syncId);
+              if (wasModified) {
+                dataToPush = sanitizedData;
+                await db.syncQueue.update(item.id!, { data: sanitizedData });
+                if (sanitizedData.img !== undefined) {
+                  await runWithRemoteSync(async () => {
+                    const table = (db as any)[item.table];
+                    if (table) {
+                      const localRec = await table.where('_syncId').equals(item.syncId).first();
+                      if (localRec && localRec.id) {
+                        await table.update(localRec.id, { img: sanitizedData.img });
+                      }
+                    }
+                  });
+                }
+              }
+            } catch (sanitizeErr) {
+              console.warn('Sanitize payload error before push:', sanitizeErr);
+            }
+
             // Direct upsert with merge: true (Zero reads required!)
             const cleanPayload = cleanForFirestore({
-              ...item.data,
+              ...dataToPush,
               _syncedAt: Date.now()
             });
 
@@ -626,6 +814,38 @@ export const runFullSync = async (force: boolean = false): Promise<{ success: bo
             notifyStatus();
             console.warn('Firestore quota reached during push. Halting queue processing to protect client.');
             break;
+          }
+
+          const errMsg = itemErr.message || String(itemErr);
+          // Auto-rescue items that exceed Firestore's 1MB document size limit (e.g. queue item #442)
+          if (errMsg.includes('exceeds the maximum allowed size') || errMsg.includes('1,048,576 bytes')) {
+            console.warn(`Queue item #${item.id} exceeded Firestore 1MB document size limit. Applying emergency rescue...`);
+            try {
+              const collectionName = TABLE_COLLECTIONS[item.table] || item.table;
+              const docRef = getShopDocRef(collectionName, item.syncId);
+              const fallbackPayload = cleanForFirestore({
+                ...item.data,
+                img: null,
+                _syncedAt: Date.now()
+              });
+              await setDoc(docRef, fallbackPayload, { merge: true });
+              await db.syncQueue.delete(item.id!);
+              pushedCount++;
+
+              // Heal local table so oversized image doesn't re-queue
+              await runWithRemoteSync(async () => {
+                const table = (db as any)[item.table];
+                if (table) {
+                  const localRec = await table.where('_syncId').equals(item.syncId).first();
+                  if (localRec && localRec.id) {
+                    await table.update(localRec.id, { img: null });
+                  }
+                }
+              });
+              continue;
+            } catch (fallbackErr) {
+              console.error(`Emergency fallback for #${item.id} failed:`, fallbackErr);
+            }
           }
 
           console.error(`Failed to push queue item #${item.id}:`, itemErr);
@@ -703,17 +923,27 @@ export const runFullSync = async (force: boolean = false): Promise<{ success: bo
             localExisting = await db.settings.get(cloudData.key);
           } else {
             localExisting = await table.where('_syncId').equals(syncId).first();
+            if (!localExisting && cloudData.id) {
+              const byId = await table.get(cloudData.id);
+              if (byId) {
+                localExisting = byId;
+                await table.update(byId.id, { _syncId: syncId });
+              }
+            }
           }
 
           // If marked deleted in cloud
           if (cloudData._deletedAt) {
             if (localExisting) {
-              if (tableName === 'settings') {
-                await db.settings.delete(cloudData.key);
-              } else if (localExisting.id) {
-                await table.delete(localExisting.id);
+              // Only apply deletion if the cloud deletion timestamp is strictly newer than local record
+              if ((localExisting._updatedAt || 0) < cloudData._deletedAt) {
+                if (tableName === 'settings') {
+                  await db.settings.delete(cloudData.key);
+                } else if (localExisting.id) {
+                  await table.delete(localExisting.id);
+                }
+                pulledCount++;
               }
-              pulledCount++;
             }
             continue;
           }
@@ -733,8 +963,27 @@ export const runFullSync = async (force: boolean = false): Promise<{ success: bo
             cleanLocal.id = (localExisting as any).id;
             await table.put(cleanLocal);
           } else {
-            delete cleanLocal.id; // allow auto-increment
-            await table.add(cleanLocal);
+            // Deduplication safety check: if local record with matching core details exists, update instead of duplicating
+            let dupMatch: any = null;
+            try {
+              if (tableName === 'sales' && cleanLocal.name && cleanLocal.date) {
+                dupMatch = await table.where({ name: cleanLocal.name, date: cleanLocal.date }).first();
+              } else if (tableName === 'orders' && cleanLocal.name && cleanLocal.item) {
+                dupMatch = await table.where({ name: cleanLocal.name, item: cleanLocal.item }).first();
+              } else if (tableName === 'karigars' && cleanLocal.name && cleanLocal.task) {
+                dupMatch = await table.where({ name: cleanLocal.name, task: cleanLocal.task }).first();
+              } else if (tableName === 'khaataEntries' && cleanLocal.accountId && cleanLocal.date) {
+                dupMatch = await table.where({ accountId: cleanLocal.accountId, date: cleanLocal.date }).first();
+              }
+            } catch (e) {}
+
+            if (dupMatch && (dupMatch as any).id) {
+              cleanLocal.id = (dupMatch as any).id;
+              await table.put(cleanLocal);
+            } else {
+              delete cleanLocal.id; // allow auto-increment
+              await table.add(cleanLocal);
+            }
           }
           pulledCount++;
         }
@@ -827,17 +1076,46 @@ export const startRealtimeListeners = () => {
           if (change.type === 'removed' || cloudData._deletedAt) {
             const local: any = await table.where('_syncId').equals(syncId).first();
             if (local?.id) {
-              await table.delete(local.id);
+              if (change.type === 'removed' || (local._updatedAt || 0) < cloudData._deletedAt) {
+                await table.delete(local.id);
+              }
             }
           } else {
-            const local: any = await table.where('_syncId').equals(syncId).first();
+            let local: any = await table.where('_syncId').equals(syncId).first();
+            if (!local && cloudData.id) {
+              const byId = await table.get(cloudData.id);
+              if (byId) {
+                local = byId;
+                await table.update(byId.id, { _syncId: syncId });
+              }
+            }
+
             const record: any = { ...cloudData, _syncId: syncId };
             if (local?.id) {
               record.id = local.id;
               await table.put(record);
             } else {
-              delete record.id;
-              await table.add(record);
+              // Deduplication safety check
+              let dupMatch: any = null;
+              try {
+                if (tableName === 'sales' && record.name && record.date) {
+                  dupMatch = await table.where({ name: record.name, date: record.date }).first();
+                } else if (tableName === 'orders' && record.name && record.item) {
+                  dupMatch = await table.where({ name: record.name, item: record.item }).first();
+                } else if (tableName === 'karigars' && record.name && record.task) {
+                  dupMatch = await table.where({ name: record.name, task: record.task }).first();
+                } else if (tableName === 'khaataEntries' && record.accountId && record.date) {
+                  dupMatch = await table.where({ accountId: record.accountId, date: record.date }).first();
+                }
+              } catch (e) {}
+
+              if (dupMatch && dupMatch.id) {
+                record.id = dupMatch.id;
+                await table.put(record);
+              } else {
+                delete record.id;
+                await table.add(record);
+              }
             }
           }
         });

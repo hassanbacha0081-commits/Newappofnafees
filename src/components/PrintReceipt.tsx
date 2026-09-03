@@ -298,11 +298,24 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
 
   if (type === 'sale') {
     const sale = data as Sale;
-    const positiveItems = sale.items.filter(item => item.t > 0);
-    const billAmount = Math.round(positiveItems.reduce((acc, item) => acc + (item.w + (item.mk || 0)) * item.r, 0));
-    const mazdoriTotal = Math.round(positiveItems.reduce((acc, item) => acc + (item.t - (item.w + (item.mk || 0)) * item.r), 0));
+    const positiveItems = (sale.items || []).filter(item => (Number(item.t) || 0) > 0);
+    const billAmount = Math.round(positiveItems.reduce((acc, item) => {
+      const w = Number(item.w) || 0;
+      const mk = Number(item.mk) || 0;
+      const r = Number(item.r) || 0;
+      return acc + (w + mk) * r;
+    }, 0));
+    const mazdoriTotal = Math.round(positiveItems.reduce((acc, item) => {
+      const w = Number(item.w) || 0;
+      const mk = Number(item.mk) || 0;
+      const r = Number(item.r) || 0;
+      const t = Number(item.t) || 0;
+      return acc + (t - (w + mk) * r);
+    }, 0));
     const totalBill = billAmount + mazdoriTotal;
-    const oldGoldPrice = Math.round(sale.items.reduce((a, b) => a + (b.t < 0 ? Math.abs(b.t) : 0), 0));
+    const oldGoldPrice = Math.round((sale.items || []).reduce((a, b) => a + ((Number(b.t) || 0) < 0 ? Math.abs(Number(b.t) || 0) : 0), 0));
+    const sampleItem = (sale.items || []).find(i => (Number(i.r) || 0) > 0) || (sale.items ? sale.items[0] : null);
+    const sampleRate = Number(sampleItem?.r) || 0;
 
     return (
       <div ref={ref} className="print-receipt-container bg-white text-zinc-900" dir={isUrdu ? "rtl" : "ltr"} style={{ 
@@ -356,11 +369,11 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
               <tr>
                 <th className={isUrdu ? "font-nastaliq" : ""} style={{ background: '#b8860b', color: 'white' }}>{isUrdu ? 'فی تولہ ریٹ' : 'Rate / Tola'}</th>
                 <td className="font-mono font-bold text-gold">
-                  {sale.items[0]?.r ? (sale.items[0].r * 12).toLocaleString() : '-'}
+                  {sampleRate ? (sampleRate * 12).toLocaleString() : '-'}
                 </td>
                 <th className={isUrdu ? "font-nastaliq" : ""} style={{ background: '#b8860b', color: 'white' }}>{isUrdu ? 'فی گرام ریٹ' : 'Rate / Gram'}</th>
                 <td className="font-mono font-bold text-gold">
-                  {sale.items[0]?.r ? Math.round(sale.items[0].r).toLocaleString() : '-'}
+                  {sampleRate ? Math.round(sampleRate).toLocaleString() : '-'}
                 </td>
               </tr>
             </tbody>
@@ -378,27 +391,34 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
               </tr>
             </thead>
             <tbody>
-              {sale.items.map((item, i) => (
-                <tr key={i}>
-                  <td className={`text-center font-bold ${isUrdu ? "font-nastaliq" : ""}`} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.n}</td>
-                  <td className="font-mono">{item.t < 0 ? '-' : (item.p || 1)}</td>
-                  <td className="font-mono font-bold">{parseFloat(Number(item.w).toFixed(2))}g</td>
-                  <td className="font-mono">{parseFloat(Number(item.mk).toFixed(2))}g</td>
-                  <td className="font-mono font-bold">{parseFloat(Number(item.w + item.mk).toFixed(2))}g</td>
-                  <td style={{ padding: '4px', verticalAlign: 'middle' }}>
-                    {item.img ? (
-                      <img 
-                        src={item.img} 
-                        alt="" 
-                        style={{ height: '65px', maxHeight: '65px', width: 'auto', maxWidth: '100%', objectFit: 'contain', margin: '0 auto' }} 
-                        className="rounded border border-zinc-200 shadow-sm"
-                      />
-                    ) : (
-                      <span className="text-zinc-300">-</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {(sale.items || []).map((item, i) => {
+                const w = Number(item.w) || 0;
+                const mk = Number(item.mk) || 0;
+                const totalWt = w + mk;
+                const isReturn = (Number(item.t) || 0) < 0;
+                const qty = isReturn ? '-' : (Number(item.p) || 1);
+                return (
+                  <tr key={i}>
+                    <td className={`text-center font-bold ${isUrdu ? "font-nastaliq" : ""}`} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.n}</td>
+                    <td className="font-mono">{qty}</td>
+                    <td className="font-mono font-bold">{parseFloat(w.toFixed(2))}g</td>
+                    <td className="font-mono">{parseFloat(mk.toFixed(2))}g</td>
+                    <td className="font-mono font-bold">{parseFloat(totalWt.toFixed(2))}g</td>
+                    <td style={{ padding: '4px', verticalAlign: 'middle' }}>
+                      {item.img ? (
+                        <img 
+                          src={item.img} 
+                          alt="" 
+                          style={{ height: '65px', maxHeight: '65px', width: 'auto', maxWidth: '100%', objectFit: 'contain', margin: '0 auto' }} 
+                          className="rounded border border-zinc-200 shadow-sm"
+                        />
+                      ) : (
+                        <span className="text-zinc-300">-</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
 
@@ -407,33 +427,33 @@ export const PrintReceipt = forwardRef<HTMLDivElement, PrintReceiptProps>(({ typ
               <tbody>
                 <tr>
                   <th className={isUrdu ? "font-nastaliq" : ""}>{isUrdu ? 'بل رقم' : 'Bill Amount'}</th>
-                  <td className="font-mono">{billAmount.toLocaleString()}</td>
+                  <td className="font-mono">{(billAmount || 0).toLocaleString()}</td>
                 </tr>
                 <tr>
                   <th className={isUrdu ? "font-nastaliq" : ""}>{isUrdu ? 'مزدوری' : 'Labor Cost'}</th>
-                  <td className="font-mono">{mazdoriTotal.toLocaleString()}</td>
+                  <td className="font-mono">{(mazdoriTotal || 0).toLocaleString()}</td>
                 </tr>
                 <tr className="bg-zinc-50 font-bold">
                   <th className={isUrdu ? "font-nastaliq" : ""}>{isUrdu ? 'کل بل' : 'Total Bill'}</th>
-                  <td className="font-mono">{totalBill.toLocaleString()}</td>
+                  <td className="font-mono">{(totalBill || 0).toLocaleString()}</td>
                 </tr>
                 <tr className="text-red-700">
                   <th className={isUrdu ? "font-nastaliq" : ""}>{isUrdu ? 'پرانا سونا قیمت (-)' : 'Old Gold (-) '}</th>
-                  <td className="font-mono">{oldGoldPrice.toLocaleString()}</td>
+                  <td className="font-mono">{(oldGoldPrice || 0).toLocaleString()}</td>
                 </tr>
                 <tr className="text-green-700">
                   <th className={isUrdu ? "font-nastaliq" : ""}>{isUrdu ? 'وصول شدہ رقم' : 'Amount Received'}</th>
-                  <td className="font-mono">{sale.rec.toLocaleString()}</td>
+                  <td className="font-mono">{(Number(sale.rec) || 0).toLocaleString()}</td>
                 </tr>
                 {sale.discount ? (
                   <tr className="text-red-600">
                     <th className={isUrdu ? "font-nastaliq" : ""}>{isUrdu ? 'چھوٹ / رعایت' : 'Discount'}</th>
-                    <td className="font-mono">{sale.discount.toLocaleString()}</td>
+                    <td className="font-mono">{(Number(sale.discount) || 0).toLocaleString()}</td>
                   </tr>
                 ) : null}
                 <tr className="final-total-row">
                   <th className={`${isUrdu ? "font-nastaliq" : ""} font-black`}>{isUrdu ? 'صاف بقایا' : 'Net Balance'}</th>
-                  <td className="font-black font-mono">{sale.rem.toLocaleString()}</td>
+                  <td className="font-black font-mono">{(Number(sale.rem) || 0).toLocaleString()}</td>
                 </tr>
               </tbody>
             </table>

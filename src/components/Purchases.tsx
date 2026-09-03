@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { db, type GoldPurchase } from '../db';
 import { translations, type Language } from '../translations';
 import { Save, Printer, Camera, RotateCcw, Users, MessageCircle } from 'lucide-react';
-import { shareImageToWhatsApp } from '../lib/utils';
+import { shareImageToWhatsApp, compressImage } from '../lib/utils';
 import { useReactToPrint } from 'react-to-print';
 import { PrintReceipt } from './PrintReceipt';
 import { html2canvasWithOklch as html2canvas } from '../lib/html2canvas-helper';
@@ -149,8 +149,14 @@ export default function Purchases({ lang }: PurchasesProps) {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setImg(reader.result as string);
+      reader.onloadend = async () => {
+        const raw = reader.result as string;
+        try {
+          const compressed = await compressImage(raw, 800, 800, 0.7);
+          setImg(compressed);
+        } catch {
+          setImg(raw);
+        }
       };
       reader.readAsDataURL(file);
     }
@@ -178,6 +184,13 @@ export default function Purchases({ lang }: PurchasesProps) {
 
       const tAmount = calculateTotal();
 
+      let finalImg = img || null;
+      if (finalImg && finalImg.length > 250000) {
+        try {
+          finalImg = await compressImage(finalImg, 800, 800, 0.7);
+        } catch (e) {}
+      }
+
       const newId = await db.goldPurchases.add({
         name: name.trim(),
         phone: phone.trim(),
@@ -185,7 +198,7 @@ export default function Purchases({ lang }: PurchasesProps) {
         rate: r,
         total: tAmount,
         date,
-        img
+        img: finalImg
       });
 
       console.log("Purchase saved with ID:", newId);

@@ -44,7 +44,8 @@ import { UrgentAlertBanner } from './components/UrgentAlertBanner';
 import { getPaletteStyles } from './lib/colors';
 
 import { APP_CONFIG } from './config';
-import { initSyncEngine } from './lib/syncEngine';
+import { restoreBackupData } from './lib/backupRestore';
+import { cleanupDuplicateRecords } from './lib/cleanupDuplicates';
 import { 
   registerBackupHooks, 
   googleSignIn, 
@@ -190,15 +191,14 @@ export default function App() {
       const initStatus = await db.settings.get('hasBeenInitialized');
       const isDbEmpty = (await db.sales.count() === 0) && (await db.orders.count() === 0);
 
-      // Initialize Enterprise Cloud Sync Engine
-      initSyncEngine().catch(console.error);
-
       if (!initStatus && isDbEmpty) {
         setIsOnboarding(true);
       } else {
         registerBackupHooks();
       }
       
+      // Startup initialization complete
+
       setTimeout(() => setIsLoading(false), 1000);
     };
     fetchSettings();
@@ -281,30 +281,7 @@ export default function App() {
     setOnboardingStep('checking');
     try {
       const data = foundBackup.data;
-      
-      await db.sales.clear();
-      await db.orders.clear();
-      await db.karigars.clear();
-      await db.repairs.clear();
-      await db.stock.clear();
-      await db.settings.clear();
-      await db.goldPurchases.clear();
-      if (db.expenses) await db.expenses.clear();
-      if (db.khaataAccounts) await db.khaataAccounts.clear();
-      if (db.khaataEntries) await db.khaataEntries.clear();
-
-      if (data.sales) await db.sales.bulkAdd(data.sales);
-      if (data.orders) await db.orders.bulkAdd(data.orders);
-      if (data.karigars) await db.karigars.bulkAdd(data.karigars);
-      if (data.repairs) await db.repairs.bulkAdd(data.repairs);
-      if (data.stock) await db.stock.bulkAdd(data.stock);
-      if (data.settings) await db.settings.bulkAdd(data.settings);
-      if (data.goldPurchases) await db.goldPurchases.bulkAdd(data.goldPurchases);
-      if (data.expenses && db.expenses) await db.expenses.bulkAdd(data.expenses);
-      if (data.khaataAccounts && db.khaataAccounts) await db.khaataAccounts.bulkAdd(data.khaataAccounts);
-      if (data.khaataEntries && db.khaataEntries) await db.khaataEntries.bulkAdd(data.khaataEntries);
-
-      await db.settings.put({ key: 'hasBeenInitialized', value: 'true' });
+      await restoreBackupData(data);
       await db.settings.put({ key: 'googleDriveConnected', value: 'true' });
 
       setOnboardingStep('success');

@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Repair } from '../db';
 import { translations, type Language } from '../translations';
 import { formatCurrency, formatDate, formatWhatsAppUrl, compressImage, shareImageToWhatsApp } from '../lib/utils';
-import { Plus, Check, Trash2, Clock, MessageCircle, Printer, Camera, RotateCcw, X, AlertTriangle, Download, AlertCircle, Search, Users, Eye, ImageIcon } from 'lucide-react';
+import { Plus, Check, Trash2, Clock, MessageCircle, Printer, Camera, RotateCcw, X, AlertTriangle, Download, AlertCircle, Search, Users, Eye, ImageIcon, Edit2 } from 'lucide-react';
 import { useReactToPrint } from 'react-to-print';
 import { html2canvasWithOklch as html2canvas } from '../lib/html2canvas-helper';
 import jsPDF from 'jspdf';
@@ -31,6 +31,7 @@ export default function Repairs({ lang }: RepairsProps) {
   const [currentImg, setCurrentImg] = useState<string | null>(null);
   const [lightboxData, setLightboxData] = useState<{ src: string; title?: string; phone?: string; caption?: string } | null>(null);
   const [isContactPickerOpen, setIsContactPickerOpen] = useState(false);
+  const [editId, setEditId] = useState<number | null>(null);
   const [formData, setFormData] = useState<any>({
     customerName: '',
     customerPhone: '',
@@ -192,27 +193,56 @@ export default function Repairs({ lang }: RepairsProps) {
 
   const handleSave = async () => {
     if (!formData.customerName) return;
-    const repair: Repair = {
-      ...formData as Repair,
-      date: new Date(),
-      img: currentImg
-    };
-    await db.repairs.add(repair);
-    setPrintData({ data: repair });
+    
+    let targetRepair: Repair;
+    let finalId: number;
+
+    if (editId) {
+      const old = await db.repairs.get(editId);
+      await db.repairs.update(editId, {
+        customerName: formData.customerName,
+        customerPhone: formData.customerPhone,
+        item: formData.item,
+        issue: formData.issue,
+        charges: Number(formData.charges) || 0,
+        dueDate: formData.dueDate,
+        status: formData.status || 'Pending',
+        img: currentImg || old?.img || null,
+        _updatedAt: Date.now()
+      });
+      finalId = editId;
+      targetRepair = (await db.repairs.get(editId)) || {
+        ...formData as Repair,
+        id: editId,
+        date: old?.date || new Date(),
+        img: currentImg || old?.img || null
+      };
+    } else {
+      const repair: Repair = {
+        ...formData as Repair,
+        date: new Date(),
+        img: currentImg
+      };
+      finalId = await db.repairs.add(repair) as number;
+      targetRepair = { ...repair, id: finalId };
+    }
+
+    setPrintData({ data: targetRepair, id: finalId });
     setShowPrintPreview(true);
     
     // Generate PDF for preview fast (100ms timeout)
     setTimeout(async () => {
-      const url = await generatePDF(repair);
-                      if (url) {
-                        setPdfUrl(url);
-                      } else {
-                        setShowPrintPreview(false);
-                        alert('PDF generation failed. Please try again or check the image format.');
-                      }
+      const url = await generatePDF(targetRepair);
+      if (url) {
+        setPdfUrl(url);
+      } else {
+        setShowPrintPreview(false);
+        alert('PDF generation failed. Please try again or check the image format.');
+      }
     }, 400);
 
     setIsAdding(false);
+    setEditId(null);
     setCurrentImg(null);
     setFormData({ customerName: '', customerPhone: '', item: '', issue: '', charges: 0, status: 'Pending' });
   };
@@ -451,10 +481,15 @@ export default function Repairs({ lang }: RepairsProps) {
                 onClick={handleSave}
                 className="flex-1 bg-gold text-black font-bold py-3 rounded-lg hover:bg-gold-light transition-all urdu-text shadow-lg shadow-gold-20"
               >
-                {t.save}
+                {editId ? (lang === 'ur' ? 'اپ ڈیٹ کریں (Update)' : 'Update') : t.save}
               </button>
               <button 
-                onClick={() => setIsAdding(false)}
+                onClick={() => {
+                  setIsAdding(false);
+                  setEditId(null);
+                  setCurrentImg(null);
+                  setFormData({ customerName: '', customerPhone: '', item: '', issue: '', charges: 0, status: 'Pending' });
+                }}
                 className="flex-1 bg-sky-50 text-zinc-600 font-bold py-3 rounded-lg hover:bg-sky-100 transition-all urdu-text border border-sky-200"
               >
                 {t.cancel}
@@ -569,6 +604,26 @@ export default function Repairs({ lang }: RepairsProps) {
                 title="Print"
               >
                 <Printer size={18} />
+              </button>
+              <button 
+                onClick={() => {
+                  setEditId(repair.id!);
+                  setFormData({
+                    customerName: repair.customerName,
+                    customerPhone: repair.customerPhone || '',
+                    item: repair.item,
+                    issue: repair.issue,
+                    charges: repair.charges || 0,
+                    status: repair.status || 'Pending',
+                    dueDate: repair.dueDate || ''
+                  });
+                  setCurrentImg(repair.img || null);
+                  setIsAdding(true);
+                }}
+                className="p-2 bg-sky-50 text-sky-600 rounded-lg hover:bg-sky-100 transition-all border border-sky-100"
+                title={lang === 'ur' ? 'ترمیم کریں' : 'Edit Repair'}
+              >
+                <Edit2 size={18} />
               </button>
               <button 
                 onClick={() => repair.id && setDeleteId(repair.id)}

@@ -22,37 +22,72 @@ export function formatDate(date: Date | string, locale: string = 'en-GB') {
   }
 }
 
-export async function compressImage(base64Str: string, maxWidth = 800, maxHeight = 800, quality = 0.7): Promise<string> {
+export async function compressImage(
+  base64Str: string, 
+  maxWidth = 800, 
+  maxHeight = 800, 
+  quality = 0.7
+): Promise<string> {
+  if (!base64Str || typeof base64Str !== 'string') return base64Str;
+  if (!base64Str.startsWith('data:image')) return base64Str;
+
   return new Promise((resolve) => {
-    const img = new Image();
-    img.src = base64Str;
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      let width = img.width;
-      let height = img.height;
+    try {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
 
-      if (width > height) {
-        if (width > maxWidth) {
-          height *= maxWidth / width;
-          width = maxWidth;
-        }
-      } else {
-        if (height > maxHeight) {
-          width *= maxHeight / height;
-          height = maxHeight;
-        }
-      }
+          if (width > height) {
+            if (width > maxWidth) {
+              height = Math.round(height * (maxWidth / width));
+              width = maxWidth;
+            }
+          } else {
+            if (height > maxHeight) {
+              width = Math.round(width * (maxHeight / height));
+              height = maxHeight;
+            }
+          }
 
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx?.drawImage(img, 0, 0, width, height);
-      resolve(canvas.toDataURL('image/jpeg', quality));
-    };
-    img.onerror = () => {
-      console.error('Image compression failed');
-      resolve(base64Str); // Fallback to original
-    };
+          canvas.width = Math.max(1, width);
+          canvas.height = Math.max(1, height);
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(base64Str);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          let result = canvas.toDataURL('image/jpeg', quality);
+
+          // If still over 500KB (~650,000 characters base64), do a second aggressive compression pass
+          if (result.length > 650000) {
+            const canvas2 = document.createElement('canvas');
+            canvas2.width = Math.max(1, Math.round(width * 0.6));
+            canvas2.height = Math.max(1, Math.round(height * 0.6));
+            const ctx2 = canvas2.getContext('2d');
+            if (ctx2) {
+              ctx2.drawImage(img, 0, 0, canvas2.width, canvas2.height);
+              result = canvas2.toDataURL('image/jpeg', 0.5);
+            }
+          }
+
+          resolve(result);
+        } catch (err) {
+          console.error('Image compression canvas error:', err);
+          resolve(base64Str);
+        }
+      };
+      img.onerror = () => {
+        console.error('Image compression failed to load');
+        resolve(base64Str);
+      };
+      img.src = base64Str;
+    } catch (e) {
+      resolve(base64Str);
+    }
   });
 }
 

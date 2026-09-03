@@ -209,18 +209,26 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
   };
 
   const calcOldValue = () => {
-    return Math.round(formData.oNetWt * formData.iRate);
+    const net = parseFloat(String(formData.oNetWt)) || 0;
+    const rate = parseFloat(String(formData.iRate)) || 0;
+    return Math.round(net * rate);
   };
 
   const addItem = () => {
-    if (formData.iName && formData.iWt && formData.iRate) {
+    const w = parseFloat(String(formData.iWt)) || 0;
+    const r = parseFloat(String(formData.iRate)) || 0;
+    if (formData.iName && w > 0 && r > 0) {
+      const mk = parseFloat(String(formData.iMk)) || 0;
+      const mazdori = parseFloat(String(formData.iMazdori)) || 0;
+      const p = parseFloat(String(formData.iQty)) || 1;
+
       const newItem: SalesItem = {
-        n: formData.iName,
-        w: formData.iWt,
-        p: formData.iQty || 1,
-        mk: formData.iMk,
-        r: formData.iRate,
-        t: (Number(formData.iWt) + Number(formData.iMk)) * Number(formData.iRate) + Number(formData.iMazdori),
+        n: formData.iName.trim(),
+        w: w,
+        p: p,
+        mk: mk,
+        r: r,
+        t: Math.round((w + mk) * r + mazdori),
         img: lastImg
       };
       setBillItems([...billItems, newItem]);
@@ -230,14 +238,16 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
   };
 
   const addOldGold = () => {
-    if (formData.oNetWt && formData.iRate) {
+    const net = parseFloat(String(formData.oNetWt)) || 0;
+    const rate = parseFloat(String(formData.iRate)) || 0;
+    if (net > 0 && rate > 0) {
       const oldGoldItem: SalesItem = {
         n: lang === 'ur' ? "پرانا سونا (واپسی)" : "Old Gold (Return)",
-        w: formData.oNetWt,
+        w: net,
         p: 1,
-        r: formData.iRate,
+        r: rate,
         mk: 0,
-        t: (formData.oNetWt * formData.iRate * -1),
+        t: -Math.round(net * rate),
         img: null
       };
       setBillItems([...billItems, oldGoldItem]);
@@ -250,11 +260,13 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
   };
 
   const getGrandTotal = () => {
-    return Math.round(billItems.reduce((sum, item) => sum + item.t, 0));
+    return Math.round(billItems.reduce((sum, item) => sum + (Number(item.t) || 0), 0));
   };
 
   const getRemainingAmount = () => {
-    return getGrandTotal() - formData.recAmt - formData.discount;
+    const rec = parseFloat(String(formData.recAmt)) || 0;
+    const disc = parseFloat(String(formData.discount)) || 0;
+    return getGrandTotal() - rec - disc;
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -272,14 +284,27 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
 
   const handleSaveAndPrint = async () => {
     const total = getGrandTotal();
+    const rec = parseFloat(String(formData.recAmt)) || 0;
+    const discount = parseFloat(String(formData.discount)) || 0;
+    const rem = total - rec - discount;
+
+    const sanitizedItems: SalesItem[] = billItems.map(item => ({
+      ...item,
+      w: parseFloat(String(item.w)) || 0,
+      p: parseFloat(String(item.p)) || 1,
+      mk: parseFloat(String(item.mk)) || 0,
+      r: parseFloat(String(item.r)) || 0,
+      t: parseFloat(String(item.t)) || 0,
+    }));
+
     const data: Sale = {
-      name: formData.cName || (lang === 'ur' ? "کسٹمر" : "Customer"),
-      phone: formData.cPhone || "-",
-      items: [...billItems],
+      name: formData.cName ? formData.cName.trim() : (lang === 'ur' ? "کسٹمر" : "Customer"),
+      phone: formData.cPhone ? formData.cPhone.trim() : "-",
+      items: sanitizedItems,
       total: total,
-      rec: Number(formData.recAmt) || 0,
-      rem: total - formData.recAmt - formData.discount,
-      discount: Number(formData.discount) || 0,
+      rec: rec,
+      rem: rem,
+      discount: discount,
       date: editingSale ? editingSale.date : formatDate(new Date(), 'ur-PK')
     };
 
@@ -287,7 +312,20 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
     try {
       if (editingSale?.id) {
         data.id = editingSale.id;
-        await db.sales.put(data);
+        if (editingSale._syncId) data._syncId = editingSale._syncId;
+        if (editingSale._createdAt) data._createdAt = editingSale._createdAt;
+
+        await db.sales.update(editingSale.id, {
+          name: data.name,
+          phone: data.phone,
+          items: data.items,
+          total: data.total,
+          rec: data.rec,
+          rem: data.rem,
+          discount: data.discount,
+          date: data.date,
+          _updatedAt: Date.now()
+        });
         finalId = editingSale.id;
       } else {
         finalId = await db.sales.add(data) as number;
@@ -499,12 +537,24 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-6 rounded-2xl shadow-sm border border-sky-100">
         <div>
           <h2 className="text-3xl font-black text-sky-900 tracking-tight urdu-text">
-            {editingSale ? (lang === 'ur' ? 'بل کی ترمیم' : 'Edit Bill') : t.billing}
+            {editingSale ? (lang === 'ur' ? `بل کی ترمیم (Bill #${editingSale.id})` : `Edit Bill #${editingSale.id}`) : t.billing}
           </h2>
-          <p className="text-zinc-500 text-sm mt-1">{lang === 'ur' ? 'نیا سیلز ریکارڈ بنائیں اور پرنٹ کریں' : 'Create and print new sales record'}</p>
+          <p className="text-zinc-500 text-sm mt-1">
+            {editingSale 
+              ? (lang === 'ur' ? 'موجودہ بل کی معلومات اپ ڈیٹ کریں - کوئی نیا ڈپلیکیٹ ریکارڈ نہیں بنے گا' : 'Updating existing record - will not create duplicate') 
+              : (lang === 'ur' ? 'نیا سیلز ریکارڈ بنائیں اور پرنٹ کریں' : 'Create and print new sales record')}
+          </p>
         </div>
         
         <div className="flex items-center gap-3">
+          {editingSale && (
+            <button
+              onClick={resetForm}
+              className="px-4 py-3 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 transition-all font-bold border border-red-200 text-sm urdu-text"
+            >
+              {lang === 'ur' ? 'ترمیم منسوخ کریں' : 'Cancel Edit'}
+            </button>
+          )}
           <button
             onClick={resetForm}
             className="flex items-center gap-2 px-5 py-3 rounded-xl bg-sky-50 text-sky-600 hover:bg-sky-100 transition-all font-bold border border-sky-200 shadow-sm"
@@ -568,8 +618,13 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
                     value={formData.pricePerTola || ''}
                     placeholder="0.00"
                     onChange={e => {
-                      const val = (e.target.value === '' ? '' : e.target.value);
-                      setFormData({ ...formData, pricePerTola: val, iRate: Number((val / 12).toFixed(2)) });
+                      const val = e.target.value;
+                      if (val === '') {
+                        setFormData({ ...formData, pricePerTola: '', iRate: '' });
+                      } else {
+                        const numVal = parseFloat(val) || 0;
+                        setFormData({ ...formData, pricePerTola: val, iRate: Number((numVal / 12).toFixed(2)) });
+                      }
                     }}
                     className="w-full pl-6 pr-12 py-5 bg-sky-900 text-gold border-none rounded-2xl focus:ring-4 focus:ring-gold/20 outline-none transition-all text-3xl font-black shadow-inner tracking-widest"
                   />
@@ -577,13 +632,21 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
                 </div>
               </div>
               <div className="space-y-2 max-w-sm">
-                <label className="text-sm font-bold text-zinc-700 ml-1 urdu-text">{lang === 'ur' ? 'ماشہ' : 'Masha'}</label>
+                <label className="text-sm font-bold text-zinc-700 ml-1 urdu-text">{lang === 'ur' ? 'ماشہ / فی گرام' : 'Masha / Gram'}</label>
                 <div className="relative">
                   <input
                     type="number" step="any"
                     value={formData.iRate || ''}
                     placeholder="0.00"
-                    onChange={e => setFormData({ ...formData, iRate: (e.target.value === '' ? '' : e.target.value) })}
+                    onChange={e => {
+                      const val = e.target.value;
+                      if (val === '') {
+                        setFormData({ ...formData, iRate: '', pricePerTola: '' });
+                      } else {
+                        const numVal = parseFloat(val) || 0;
+                        setFormData({ ...formData, iRate: val, pricePerTola: Math.round(numVal * 12) });
+                      }
+                    }}
                     className="w-full pl-6 pr-12 py-5 bg-sky-50 text-sky-900 border border-sky-200 rounded-2xl focus:ring-4 focus:ring-gold/20 outline-none transition-all text-3xl font-black shadow-inner tracking-widest"
                   />
                   <span className="absolute right-5 top-1/2 -translate-y-1/2 font-bold text-zinc-500 text-xs">PKR</span>
@@ -874,7 +937,11 @@ export default function Billing({ lang, editingSale, setEditingSale }: BillingPr
                 <div className="p-2 bg-gold text-black rounded-xl group-hover:rotate-12 transition-transform shadow-lg shadow-gold/40">
                   <CheckCircle2 size={28} />
                 </div>
-                <span>{lang === 'ur' ? 'بل مکمل کریں (Finish)' : 'Complete & Print'}</span>
+                <span>
+                  {editingSale 
+                    ? (lang === 'ur' ? 'بل اپ ڈیٹ اور محفوظ کریں (Update)' : 'Update & Print') 
+                    : (lang === 'ur' ? 'بل مکمل کریں (Finish)' : 'Complete & Print')}
+                </span>
               </button>
             </div>
           </div>

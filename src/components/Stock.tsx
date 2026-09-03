@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type StockItem } from '../db';
 import { translations, type Language } from '../translations';
 import { Plus, Trash2, Edit2, Package, Coins, Camera, RotateCcw, Image as ImageIcon, AlertTriangle, Printer, X, Download, AlertCircle, Search, MessageCircle, Eye } from 'lucide-react';
-import { shareImageToWhatsApp } from '../lib/utils';
+import { shareImageToWhatsApp, compressImage } from '../lib/utils';
 import { useReactToPrint } from 'react-to-print';
 import { html2canvasWithOklch as html2canvas } from '../lib/html2canvas-helper';
 import jsPDF from 'jspdf';
@@ -28,6 +28,7 @@ export default function Stock({ lang }: StockProps) {
   const [currentImg, setCurrentImg] = useState<string | null>(null);
   const [lightboxData, setLightboxData] = useState<{ src: string; title?: string; phone?: string; caption?: string } | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [editingStockId, setEditingStockId] = useState<number | null>(null);
   const [formData, setFormData] = useState<any>({
     name: '',
     type: 'Gold',
@@ -171,8 +172,14 @@ export default function Stock({ lang }: StockProps) {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = (event) => {
-        setCurrentImg(event.target?.result as string);
+      reader.onload = async (event) => {
+        const raw = event.target?.result as string;
+        try {
+          const compressed = await compressImage(raw, 800, 800, 0.7);
+          setCurrentImg(compressed);
+        } catch {
+          setCurrentImg(raw);
+        }
       };
       reader.readAsDataURL(file);
     }
@@ -182,6 +189,32 @@ export default function Stock({ lang }: StockProps) {
     if (!formData.name) return;
     
     try {
+      let finalImg = currentImg || null;
+      if (finalImg && finalImg.length > 250000) {
+        try {
+          finalImg = await compressImage(finalImg, 800, 800, 0.7);
+        } catch (e) {}
+      }
+
+      // If user is editing a specific stock item
+      if (editingStockId !== null) {
+        const existing = await db.stock.get(editingStockId);
+        await db.stock.update(editingStockId, {
+          name: formData.name,
+          type: formData.type as 'Gold' | 'Item',
+          quantity: Number(formData.quantity) || 0,
+          unit: formData.unit || 'g',
+          pieces: Number(formData.pieces) || 0,
+          img: finalImg || existing?.img || null,
+          _updatedAt: Date.now()
+        });
+        setIsAdding(false);
+        setEditingStockId(null);
+        setCurrentImg(null);
+        setFormData({ name: '', type: 'Gold', quantity: 0, unit: 'g', pieces: 0 });
+        return;
+      }
+
       const existing = await db.stock
         .where('[name+type]')
         .equals([formData.name, formData.type || 'Gold'])
@@ -190,13 +223,12 @@ export default function Stock({ lang }: StockProps) {
       const record: StockItem = {
         name: formData.name,
         type: formData.type as 'Gold' | 'Item',
-        quantity: formData.quantity || 0,
+        quantity: Number(formData.quantity) || 0,
         unit: formData.unit || 'g',
-        pieces: formData.pieces || 0,
-        img: currentImg || (existing?.img)
+        pieces: Number(formData.pieces) || 0,
+        img: finalImg || existing?.img || null
       };
 
-      let finalId: number;
       if (existing && existing.id) {
         record.quantity += existing.quantity;
         record.pieces = (record.pieces || 0) + (existing.pieces || 0);
@@ -206,17 +238,29 @@ export default function Stock({ lang }: StockProps) {
       }
 
       setIsAdding(false);
+      setEditingStockId(null);
       setCurrentImg(null);
       setFormData({ name: '', type: 'Gold', quantity: 0, unit: 'g', pieces: 0 });
     } catch (err) {
       console.error("Error saving stock:", err);
-      // Fallback if index [name+type] is missing or error
+      // Fallback
+      let fallbackImg = currentImg || null;
+      if (fallbackImg && fallbackImg.length > 250000) {
+        try {
+          fallbackImg = await compressImage(fallbackImg, 800, 800, 0.7);
+        } catch (e) {}
+      }
       const record = {
         ...formData as StockItem,
-        img: currentImg
+        img: fallbackImg
       };
-      await db.stock.add(record);
+      if (editingStockId !== null) {
+        await db.stock.update(editingStockId, record);
+      } else {
+        await db.stock.add(record);
+      }
       setIsAdding(false);
+      setEditingStockId(null);
       setCurrentImg(null);
       setFormData({ name: '', type: 'Gold', quantity: 0, unit: 'g', pieces: 0 });
     }
@@ -451,10 +495,15 @@ export default function Stock({ lang }: StockProps) {
                 onClick={handleSave}
                 className="flex-1 bg-gold text-black font-bold py-3 rounded-lg hover:bg-gold-light transition-all urdu-text shadow-lg shadow-gold-20"
               >
-                {t.save}
+                {editingStockId !== null ? (lang === 'ur' ? 'اپ ڈیٹ کریں (Update)' : 'Update') : t.save}
               </button>
               <button 
-                onClick={() => setIsAdding(false)}
+                onClick={() => {
+                  setIsAdding(false);
+                  setEditingStockId(null);
+                  setCurrentImg(null);
+                  setFormData({ name: '', type: 'Gold', quantity: 0, unit: 'g', pieces: 0 });
+                }}
                 className="flex-1 bg-sky-50 text-zinc-600 font-bold py-3 rounded-lg hover:bg-sky-100 transition-all urdu-text border border-sky-200"
               >
                 {t.cancel}
@@ -526,6 +575,24 @@ export default function Stock({ lang }: StockProps) {
                   </button>
                 </>
               )}
+              <button 
+                onClick={() => {
+                  setEditingStockId(item.id!);
+                  setFormData({
+                    name: item.name,
+                    type: item.type,
+                    quantity: item.quantity,
+                    unit: item.unit,
+                    pieces: item.pieces || 0
+                  });
+                  setCurrentImg(item.img || null);
+                  setIsAdding(true);
+                }}
+                className="p-2 text-sky-600 hover:text-sky-800 transition-colors"
+                title={lang === 'ur' ? 'ترمیم کریں' : 'Edit Item'}
+              >
+                <Edit2 size={18} />
+              </button>
               <button 
                 onClick={() => item.id && setDeleteId(item.id)}
                 className="p-2 text-zinc-400 hover:text-red-600 transition-colors"
