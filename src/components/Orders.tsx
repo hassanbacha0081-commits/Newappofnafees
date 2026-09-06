@@ -224,9 +224,10 @@ export default function Orders({ lang }: OrdersProps) {
     let count = 0;
     let amount = 0;
     rawOrders.forEach(o => {
-      if ((o.rem || 0) > 0) {
+      const rem = parseFloat(String(o.rem || 0)) || 0;
+      if (rem > 0) {
         count += 1;
-        amount += (o.rem || 0);
+        amount += rem;
       }
     });
     return { totalBaqayaOrdersCount: count, totalBaqayaOrdersAmount: amount };
@@ -235,15 +236,22 @@ export default function Orders({ lang }: OrdersProps) {
   const { totalOrdersWeight, totalOrdersPolish, totalOrdersMazdori } = useMemo(() => {
     let w = 0, p = 0, m = 0;
     orders.forEach(o => {
-      w += parseFloat(o.readyWt) || 0;
-      p += parseFloat(o.makingCharges || '0') || 0;
-      m += o.mazdori || 0;
+      w += parseFloat(String(o.readyWt || 0)) || 0;
+      p += parseFloat(String(o.makingCharges || 0)) || 0;
+      m += parseFloat(String(o.mazdori || 0)) || 0;
     });
     return { totalOrdersWeight: w, totalOrdersPolish: p, totalOrdersMazdori: m };
   }, [orders]);
 
   const updateRem = () => {
-    if (editId) { return Number(formData.total) - formData.payments.reduce((s, p) => s + p.amt, 0) - formData.discount; } return Number(formData.total) - Number(formData.recAmt) - Number(formData.discount);
+    const total = Number(formData.total) || 0;
+    const discount = Number(formData.discount) || 0;
+    if (editId) { 
+      const paid = formData.payments?.reduce((s: number, p: any) => s + (Number(p.amt) || 0), 0) || 0;
+      return total - paid - discount; 
+    } 
+    const recAmt = Number(formData.recAmt) || 0;
+    return total - recAmt - discount;
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -273,12 +281,12 @@ export default function Orders({ lang }: OrdersProps) {
       karigar: formData.karigar,
       oldWt: formData.oldWt ? parseFloat(Number(formData.oldWt).toFixed(2)).toString() : '',
       readyWt: formData.readyWt ? parseFloat(Number(formData.readyWt).toFixed(2)).toString() : '',
-      price: formData.price,
-      mazdori: formData.mazdori,
-      total: formData.total,
-      payments: editId ? formData.payments : [{ amt: formData.recAmt, date: formatDate(new Date(), 'ur-PK') }],
+      price: Number(formData.price) || 0,
+      mazdori: Number(formData.mazdori) || 0,
+      total: Number(formData.total) || 0,
+      payments: editId ? (formData.payments || []).map((p: any) => ({ ...p, amt: Number(p.amt) || 0 })) : [{ amt: Number(formData.recAmt) || 0, date: formatDate(new Date(), 'ur-PK') }],
       rem: updateRem(),
-      discount: formData.discount,
+      discount: Number(formData.discount) || 0,
       status: formData.status,
       img: currentImg,
       makingCharges: formData.makingCharges ? parseFloat(Number(formData.makingCharges).toFixed(2)).toString() : '',
@@ -602,26 +610,26 @@ export default function Orders({ lang }: OrdersProps) {
       </div>
 
       {/* Stats Block */}
-      <div className="flex gap-6 p-4 bg-white border border-sky-200 rounded-xl shadow-sm overflow-x-auto mb-6">
-        <div className="flex flex-col flex-shrink-0 min-w-32">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 p-4 bg-white border border-sky-200 rounded-xl shadow-sm mb-6">
+        <div className="flex flex-col p-3 bg-gold-50/40 rounded-xl border border-gold-100">
           <span className="text-xs text-zinc-500 urdu-text font-bold">{lang === 'ur' ? 'کل وزن:' : 'Total Weight:'}</span>
-          <span className="text-2xl font-black text-gold-dark">{totalOrdersWeight.toFixed(3)}g</span>
+          <span className="text-xl sm:text-2xl font-black text-gold-dark mt-1">{totalOrdersWeight.toFixed(3)}g</span>
         </div>
-        <div className="flex flex-col flex-shrink-0 min-w-32 border-l border-sky-100 pl-6">
+        <div className="flex flex-col p-3 bg-sky-50/40 rounded-xl border border-sky-100">
           <span className="text-xs text-zinc-500 urdu-text font-bold">{lang === 'ur' ? 'کل پالش:' : 'Total Polish:'}</span>
-          <span className="text-2xl font-black text-sky-700">{totalOrdersPolish.toFixed(3)}g</span>
+          <span className="text-xl sm:text-2xl font-black text-sky-700 mt-1">{totalOrdersPolish.toFixed(3)}g</span>
         </div>
-        <div className="flex flex-col flex-shrink-0 min-w-32 border-l border-sky-100 pl-6">
+        <div className="flex flex-col p-3 bg-emerald-50/40 rounded-xl border border-emerald-100">
           <span className="text-xs text-zinc-500 urdu-text font-bold">{lang === 'ur' ? 'کل مزدوری:' : 'Total Mazdori:'}</span>
-          <span className="text-2xl font-black text-green-600">Rs. {Math.round(totalOrdersMazdori).toLocaleString()}</span>
+          <span className="text-xl sm:text-2xl font-black text-green-600 mt-1">Rs. {Math.round(totalOrdersMazdori).toLocaleString()}</span>
         </div>
         {totalBaqayaOrdersCount > 0 && (
-          <div className="flex flex-col flex-shrink-0 min-w-36 border-l border-red-200 pl-6 bg-red-50/60 -my-4 py-4 pr-4 rounded-r-xl">
+          <div className="flex flex-col p-3 bg-red-50/70 rounded-xl border border-red-200 col-span-2 sm:col-span-3 lg:col-span-1">
             <span className="text-xs text-red-600 urdu-text font-bold flex items-center gap-1">
-              <AlertCircle size={12} />
-              {lang === 'ur' ? 'کل بقایا رقم (آرڈرز):' : 'Total Pending Baqaya:'}
+              <AlertCircle size={14} className="flex-shrink-0" />
+              <span>{lang === 'ur' ? 'کل بقایا رقم (آرڈرز):' : 'Total Pending Baqaya:'}</span>
             </span>
-            <span className="text-2xl font-black text-red-600 font-mono">
+            <span className="text-xl sm:text-2xl font-black text-red-600 font-mono mt-1">
               Rs. {totalBaqayaOrdersAmount.toLocaleString()}
             </span>
             <span className="text-[10px] text-red-500 font-bold urdu-text">
